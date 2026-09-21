@@ -40,6 +40,7 @@ export const initialUsers = [
     role: 'super_admin',
     labelRole: 'Super Admin',
     status: 'Aktif',
+    isOnline: true,
     lastLogin: '2026-09-20 13:45',
   },
   {
@@ -51,6 +52,7 @@ export const initialUsers = [
     role: 'admin',
     labelRole: 'Admin Operasional',
     status: 'Aktif',
+    isOnline: true,
     lastLogin: '2026-09-20 11:15',
   },
   {
@@ -62,6 +64,7 @@ export const initialUsers = [
     role: 'viewer',
     labelRole: 'Viewer / Pengawas',
     status: 'Aktif',
+    isOnline: false,
     lastLogin: '2026-09-19 16:30',
   },
 ];

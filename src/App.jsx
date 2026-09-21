@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { MobileNav } from './components/MobileNav';
 import { Dashboard } from './components/Dashboard';
@@ -357,28 +356,11 @@ export default function App() {
     );
   }
 
-  // Resolve current active tab view name
-  const tabNames = {
-    dashboard: 'Dashboard Analitik',
-    kloter: selectedKloterId ? 'Detail Kloter' : 'Manajemen Kloter',
-    penjualan: 'Data & Transaksi Penjualan',
-    harga: 'Pengaturan Harga per Ons',
-    laporan: 'Laporan & Perbandingan Kloter',
-    jadwal_export: 'Pengaturan Kirim Export PDF',
-    user: 'Manajemen User & Hak Akses',
-  };
-
   // Find selected kloter object
   const currentKloterObj = kloters.find((k) => k.id === selectedKloterId);
 
   return (
     <div className="app-container min-h-screen bg-sky-50/50 flex flex-col font-sans overflow-x-hidden">
-      {/* Top Header Bar */}
-      <Header
-        activePrice={hargaConfig.hargaPerOnsAktif}
-        currentViewName={tabNames[currentTab]}
-      />
-
       <div className="main-content-wrapper flex flex-1">
         {/* Desktop Sidebar Navigation */}
         <Sidebar

@@ -18,6 +18,7 @@ import {
   formatDateIndonesian,
 } from '../utils/calculations';
 import { exportKloterToExcel, exportKloterToPDF } from '../utils/exportUtils';
+import { KloterSelect } from './KloterSelect';
 
 export function KloterList({
   kloters,
@@ -239,25 +240,18 @@ export function KloterList({
             </div>
 
             <div className="space-y-4 text-xs">
-              {/* Target Kloter Selection */}
+              {/* Target Kloter Selection using Searchable KloterSelect */}
               <div>
                 <label className="block font-bold text-slate-700 mb-1.5">
                   Pilih Cakupan Kloter yang Ingin Di-export:
                 </label>
-                <select
-                  className="w-full p-2.5 rounded-xl border border-slate-300 focus:outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 font-bold bg-white text-slate-800"
-                  value={exportTarget}
-                  onChange={(e) => setExportTarget(e.target.value)}
-                >
-                  <option value="all">📊 Semua Kloter (Rekap Laporan Lengkap)</option>
-                  <optgroup label="Pilih Kloter Spesifik:">
-                    {kloters.map((k) => (
-                      <option key={k.id} value={k.id}>
-                        {k.namaKloter} ({k.id}) - [{k.status}]
-                      </option>
-                    ))}
-                  </optgroup>
-                </select>
+                <KloterSelect
+                  kloters={kloters}
+                  selectedKloterId={exportTarget === 'all' ? 'semua' : exportTarget}
+                  onSelectKloter={(id) => setExportTarget(id === 'semua' ? 'all' : id)}
+                  includeSemua={true}
+                  className="w-full"
+                />
               </div>
 
               {/* Export Format Selection */}

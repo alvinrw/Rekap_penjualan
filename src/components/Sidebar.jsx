@@ -15,15 +15,10 @@ export function Sidebar({ currentTab, setCurrentTab, currentRole, currentUser, o
   const isSuperAdmin = currentRole === 'super_admin';
 
   return (
-    <aside className="hidden md:flex flex-col w-64 bg-white border-r border-sky-100 p-4 space-y-6 sticky top-16 h-[calc(100vh-4rem)] z-20">
-      <div className="flex items-center gap-3 px-2 py-1">
-        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-sky-500 to-sky-700 text-white flex items-center justify-center shadow-md">
-          <Boxes size={20} />
-        </div>
-        <div>
-          <span className="font-extrabold text-sm text-slate-900 block leading-tight">Pendataan Ayam</span>
-          <span className="text-[10px] text-sky-600 font-bold uppercase tracking-wider">Kloter Management</span>
-        </div>
+    <aside className="hidden md:flex flex-col w-64 bg-white border-r border-sky-100 p-4 space-y-6 sticky top-0 h-screen z-20">
+      <div className="px-2 py-1">
+        <span className="font-extrabold text-sm text-slate-900 block leading-tight">Pendataan Ayam</span>
+        <span className="text-[10px] text-sky-600 font-bold uppercase tracking-wider">Kloter Management</span>
       </div>
 
       <nav className="space-y-1.5 flex-1">

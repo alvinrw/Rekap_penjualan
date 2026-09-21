@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Scale,
   PlusCircle,
@@ -15,6 +15,7 @@ import {
   FileSpreadsheet,
   FileText,
   Download,
+  ChevronDown,
 } from 'lucide-react';
 import {
   formatRupiah,
@@ -23,7 +24,7 @@ import {
   formatDateIndonesian,
 } from '../utils/calculations';
 import { exportPenjualanToExcel, exportPenjualanToPDF } from '../utils/exportUtils';
-
+import { KloterSelect } from './KloterSelect';
 import { Pagination } from './Pagination';
 
 export function PenjualanView({
@@ -39,6 +40,13 @@ export function PenjualanView({
   const [receiptItem, setReceiptItem] = useState(null); // When printable receipt modal is active
   const [editingItem, setEditingItem] = useState(null); // When editing modal is active
   const [currentPage, setCurrentPage] = useState(1);
+  const [activeActionSaleId, setActiveActionSaleId] = useState(null);
+
+  useEffect(() => {
+    const handleClickOutside = () => setActiveActionSaleId(null);
+    window.addEventListener('click', handleClickOutside);
+    return () => window.removeEventListener('click', handleClickOutside);
+  }, []);
 
   const isViewer = currentRole === 'viewer';
 
@@ -191,19 +199,12 @@ export function PenjualanView({
         </div>
 
         <div className="flex items-center gap-2">
-          <Filter size={14} className="text-slate-400 flex-shrink-0" />
-          <select
-            className="text-xs font-bold bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 focus:outline-none focus:border-sky-500"
-            value={selectedKloterFilter}
-            onChange={(e) => setSelectedKloterFilter(e.target.value)}
-          >
-            <option value="semua">Semua Kloter</option>
-            {kloters.map((k) => (
-              <option key={k.id} value={k.id}>
-                {k.namaKloter}
-              </option>
-            ))}
-          </select>
+          <KloterSelect
+            kloters={kloters}
+            selectedKloterId={selectedKloterFilter}
+            onSelectKloter={(id) => setSelectedKloterFilter(id)}
+            includeSemua={true}
+          />
         </div>
       </div>
 
@@ -256,46 +257,75 @@ export function PenjualanView({
                         {sale.metodePembayaran}
                       </span>
                     </td>
-                    {/* Action Column */}
+                    {/* Single Action Dropdown Column */}
                     <td className="py-3.5 px-4 text-center">
-                      <div className="flex items-center justify-center gap-1.5">
-                        {/* Cetak Struk Button */}
+                      <div className="relative inline-block text-left">
                         <button
-                          className="p-1.5 bg-sky-50 text-sky-700 hover:bg-sky-100 rounded-lg transition"
-                          onClick={() => setReceiptItem(sale)}
-                          title="Cetak Struk Penjualan"
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveActionSaleId(activeActionSaleId === sale.id ? null : sale.id);
+                          }}
+                          className="px-3 py-1.5 bg-white hover:bg-sky-50 text-slate-700 hover:text-sky-800 rounded-xl text-xs font-bold border border-slate-200 shadow-2xs transition flex items-center gap-1.5 cursor-pointer mx-auto"
                         >
-                          <Printer size={15} />
+                          <span>Aksi</span>
+                          <ChevronDown size={14} className="text-slate-400" />
                         </button>
 
-                        {!isViewer && (
-                          <>
-                            {/* Edit Button */}
+                        {activeActionSaleId === sale.id && (
+                          <div
+                            className="absolute right-0 mt-1 w-44 bg-white rounded-xl shadow-xl border border-slate-200/80 p-1.5 z-50 text-xs font-medium text-slate-700 space-y-1 animate-in fade-in zoom-in-95 duration-150 text-left"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {/* Cetak Struk */}
                             <button
-                              className="p-1.5 bg-amber-50 text-amber-700 hover:bg-amber-100 rounded-lg transition"
-                              onClick={() => setEditingItem(sale)}
-                              title="Edit Transaksi Penjualan"
+                              type="button"
+                              onClick={() => {
+                                setActiveActionSaleId(null);
+                                setReceiptItem(sale);
+                              }}
+                              className="w-full flex items-center gap-2 px-2.5 py-1.5 hover:bg-sky-50 text-sky-800 rounded-lg transition text-left cursor-pointer font-semibold"
                             >
-                              <Edit size={15} />
+                              <Printer size={14} className="text-sky-600" />
+                              <span>Cetak Struk</span>
                             </button>
 
-                            {/* Delete Button */}
-                            <button
-                              className="p-1.5 bg-red-50 text-red-700 hover:bg-red-100 rounded-lg transition"
-                              onClick={() => {
-                                if (
-                                  window.confirm(
-                                    `Apakah Anda yakin ingin menghapus data penjualan dari '${sale.pembeli}' sebesar ${formatRupiah(sale.totalHarga)}?`
-                                  )
-                                ) {
-                                  onDeletePenjualan(sale.kloterId, sale.id);
-                                }
-                              }}
-                              title="Hapus Transaksi"
-                            >
-                              <Trash2 size={15} />
-                            </button>
-                          </>
+                            {!isViewer && (
+                              <>
+                                {/* Edit */}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setActiveActionSaleId(null);
+                                    setEditingItem(sale);
+                                  }}
+                                  className="w-full flex items-center gap-2 px-2.5 py-1.5 hover:bg-amber-50 text-amber-800 rounded-lg transition text-left cursor-pointer font-semibold"
+                                >
+                                  <Edit size={14} className="text-amber-600" />
+                                  <span>Edit Transaksi</span>
+                                </button>
+
+                                {/* Hapus */}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setActiveActionSaleId(null);
+                                    if (
+                                      window.confirm(
+                                        `Apakah Anda yakin ingin menghapus data penjualan dari '${sale.pembeli}' sebesar ${formatRupiah(sale.totalHarga)}?`
+                                      )
+                                    ) {
+                                      onDeletePenjualan(sale.kloterId, sale.id);
+                                    }
+                                  }}
+                                  className="w-full flex items-center gap-2 px-2.5 py-1.5 hover:bg-red-50 text-red-700 rounded-lg transition text-left cursor-pointer font-semibold"
+                                >
+                                  <Trash2 size={14} className="text-red-600" />
+                                  <span>Hapus</span>
+                                </button>
+                              </>
+                            )}
+                          </div>
                         )}
                       </div>
                     </td>

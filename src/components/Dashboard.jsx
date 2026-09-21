@@ -16,6 +16,8 @@ import {
   formatNumber,
 } from '../utils/calculations';
 
+import { KloterSelect } from './KloterSelect';
+
 export function Dashboard({
   kloters,
   activeHargaPerOns,
@@ -191,21 +193,14 @@ export function Dashboard({
             </h3>
           </div>
 
-          {/* Kloter Selector Dropdown */}
+          {/* Searchable Kloter Selector Dropdown */}
           <div className="flex items-center gap-2 self-start sm:self-auto">
             <span className="text-xs font-bold text-slate-600 whitespace-nowrap">Pilih Kloter:</span>
-            <select
-              className="text-xs font-bold bg-sky-50 border border-sky-200 rounded-xl px-3 py-2 text-sky-900 focus:outline-none focus:border-sky-500 cursor-pointer shadow-2xs"
-              value={selectedKloterId}
-              onChange={(e) => setSelectedKloterId(e.target.value)}
-            >
-              <option value="semua">Semua Kloter (3 Kloter Terakhir)</option>
-              {kloters.map((k) => (
-                <option key={k.id} value={k.id}>
-                  {k.namaKloter} ({k.status})
-                </option>
-              ))}
-            </select>
+            <KloterSelect
+              kloters={kloters}
+              selectedKloterId={selectedKloterId}
+              onSelectKloter={setSelectedKloterId}
+            />
           </div>
         </div>
 

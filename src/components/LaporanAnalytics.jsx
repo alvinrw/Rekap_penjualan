@@ -1,12 +1,22 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { FileSpreadsheet, Download } from 'lucide-react';
 import { calculateKloterMetrics, formatRupiah, formatNumber } from '../utils/calculations';
+import { exportKloterToExcel } from '../utils/exportUtils';
+import { Pagination } from './Pagination';
 
 export function LaporanAnalytics({ kloters, activeHargaPerOns }) {
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 15;
+
   const reportsData = kloters.map((kloter) => ({
     kloter,
     metrics: calculateKloterMetrics(kloter, activeHargaPerOns),
   }));
+
+  const paginatedReportsData = reportsData.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize
+  );
 
   return (
     <div className="space-y-6">
@@ -19,8 +29,8 @@ export function LaporanAnalytics({ kloters, activeHargaPerOns }) {
         </div>
 
         <button
-          className="flex items-center justify-center gap-2 px-3.5 py-2 bg-white hover:bg-sky-50 text-sky-700 border border-sky-200 font-bold text-xs rounded-xl shadow-2xs transition self-start sm:self-auto cursor-pointer"
-          onClick={() => alert('Exporting laporan Excel...')}
+          className="flex items-center justify-center gap-2 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-600 font-bold text-xs rounded-xl shadow-xs transition self-start sm:self-auto cursor-pointer"
+          onClick={() => exportKloterToExcel(kloters, 'all', activeHargaPerOns)}
         >
           <Download size={15} />
           <span>Export Excel</span>
@@ -39,7 +49,7 @@ export function LaporanAnalytics({ kloters, activeHargaPerOns }) {
 
         {/* Mobile View: Responsive Stacked Cards (< 640px) */}
         <div className="block sm:hidden space-y-3">
-          {reportsData.map(({ kloter, metrics }) => (
+          {paginatedReportsData.map(({ kloter, metrics }) => (
             <div
               key={kloter.id}
               className="p-4 rounded-xl border border-sky-100 bg-sky-50/40 space-y-3"
@@ -101,11 +111,11 @@ export function LaporanAnalytics({ kloters, activeHargaPerOns }) {
         </div>
 
         {/* Desktop / Tablet View: Full Data Table (>= 640px) */}
-        <div className="hidden sm:block table-container">
+        <div className="hidden sm:block table-container border border-slate-100 rounded-xl overflow-hidden">
           <table className="custom-table">
             <thead>
               <tr>
-                <th>Nama Kloter & Kandang</th>
+                <th>Nama Kloter &amp; Kandang</th>
                 <th>Status</th>
                 <th>DOC Awal</th>
                 <th>Mortality Rate (%)</th>
@@ -117,7 +127,7 @@ export function LaporanAnalytics({ kloters, activeHargaPerOns }) {
               </tr>
             </thead>
             <tbody>
-              {reportsData.map(({ kloter, metrics }) => (
+              {paginatedReportsData.map(({ kloter, metrics }) => (
                 <tr key={kloter.id}>
                   <td>
                     <div className="font-bold text-slate-900">{kloter.namaKloter}</div>
@@ -148,7 +158,15 @@ export function LaporanAnalytics({ kloters, activeHargaPerOns }) {
             </tbody>
           </table>
         </div>
+
+        <Pagination
+          currentPage={currentPage}
+          totalItems={kloters.length}
+          pageSize={pageSize}
+          onPageChange={setCurrentPage}
+        />
       </div>
     </div>
   );
 }
+
