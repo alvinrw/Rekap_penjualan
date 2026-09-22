@@ -31,32 +31,36 @@ router.post('/send-email', async (req, res) => {
     const smtpUser = process.env.SMTP_USER;
     const smtpPass = process.env.SMTP_PASS;
 
-    if (!smtpUser || !smtpPass) {
-      console.log(`[SIMULATED EMAIL DISPATCH] To: ${toEmail} | Subject: Laporan ${reportLabel} | File: ${fileName}`);
-      return res.json({
-        success: true,
-        isSimulated: true,
-        message: `[Simulasi Pengiriman Email] Laporan '${reportLabel}' berhasil diproses untuk ${recipientName} (${toEmail}).`,
-        details: {
-          toEmail,
-          recipientName,
-          reportLabel,
-          fileName,
-          sentAt: new Date().toISOString(),
-          note: 'Untuk mengaktifkan pengiriman email sungguhan ke inbox via Gmail/SMTP, masukkan SMTP_USER & SMTP_PASS pada file .env backend.',
+    let transporter;
+    let isEthereal = false;
+    let senderAddress = '';
+
+    if (smtpUser && smtpPass) {
+      transporter = nodemailer.createTransport({
+        host: smtpHost,
+        port: smtpPort,
+        secure: smtpPort === 465,
+        auth: {
+          user: smtpUser,
+          pass: smtpPass,
         },
       });
+      senderAddress = `"${process.env.SMTP_FROM_NAME || 'Peternakan Unggul Mandiri'}" <${smtpUser}>`;
+    } else {
+      // Create test account on Ethereal for real SMTP dispatch and web inbox view
+      const testAccount = await nodemailer.createTestAccount();
+      transporter = nodemailer.createTransport({
+        host: 'smtp.ethereal.email',
+        port: 587,
+        secure: false,
+        auth: {
+          user: testAccount.user,
+          pass: testAccount.pass,
+        },
+      });
+      isEthereal = true;
+      senderAddress = `"Peternakan Unggul Mandiri (Mail Server)" <${testAccount.user}>`;
     }
-
-    const transporter = nodemailer.createTransport({
-      host: smtpHost,
-      port: smtpPort,
-      secure: smtpPort === 465,
-      auth: {
-        user: smtpUser,
-        pass: smtpPass,
-      },
-    });
 
     const attachments = [];
     if (fileBase64 && fileName) {
@@ -67,34 +71,74 @@ router.post('/send-email', async (req, res) => {
       });
     }
 
-    const info = await transporter.sendMail({
-      from: `"${process.env.SMTP_FROM_NAME || 'Peternakan Unggul Mandiri'}" <${smtpUser}>`,
+    const mailOptions = {
+      from: senderAddress,
       to: toEmail,
       subject: `[LAPORAN AUTOMATED BACKUP] ${reportLabel} - ${new Date().toLocaleDateString('id-ID')}`,
       html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px;">
-          <h2 style="color: #0369a1;">Peternakan Unggul Mandiri</h2>
-          <p>Halo <strong>${recipientName}</strong>,</p>
-          <p>Terlampir laporan backup otomatis sistem: <strong>${reportLabel}</strong>.</p>
-          <p>Silakan unduh berkas lampiran <code>${fileName}</code> yang ada pada email ini.</p>
-          <hr style="border: 0; border-top: 1px solid #cbd5e1; margin: 20px 0;" />
-          <p style="font-size: 11px; color: #64748b;">Pesan otomatis dari Sistem Pendataan Ayam Broiler Berbasis Kloter.</p>
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 16px; background-color: #ffffff;">
+          <div style="background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%); padding: 20px; border-radius: 12px; text-align: center; color: #ffffff;">
+            <h1 style="margin: 0; font-size: 20px; font-weight: bold; color: #38bdf8;">PETERNAKAN UNGGUL MANDIRI</h1>
+            <p style="margin: 4px 0 0 0; font-size: 12px; color: #cbd5e1;">Sistem Informasi & Pendataan Broiler Berbasis Kloter</p>
+          </div>
+
+          <div style="padding: 20px 0;">
+            <p style="font-size: 14px; color: #1e293b; margin-bottom: 12px;">Halo <strong>${recipientName}</strong>,</p>
+            <p style="font-size: 13px; color: #475569; line-height: 1.6;">
+              Laporan otomatis backup data sistem <strong>${reportLabel}</strong> telah berhasil diterbitkan dan siap diunduh.
+            </p>
+
+            <div style="background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 10px; padding: 14px; margin: 16px 0;">
+              <table style="width: 100%; font-size: 12px; color: #334155;">
+                <tr>
+                  <td style="padding: 4px 0; font-weight: bold; width: 130px;">Jenis Berkas:</td>
+                  <td>${reportLabel}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 4px 0; font-weight: bold;">Nama Lampiran:</td>
+                  <td><code>${fileName}</code></td>
+                </tr>
+                <tr>
+                  <td style="padding: 4px 0; font-weight: bold;">Waktu Pengiriman:</td>
+                  <td>${new Date().toLocaleString('id-ID')} WIB</td>
+                </tr>
+              </table>
+            </div>
+
+            <p style="font-size: 12px; color: #64748b;">
+              Lampiran berkas telah terlampir pada email ini. Silakan unduh untuk keperluan arsip dan disaster recovery.
+            </p>
+          </div>
+
+          <div style="border-top: 1px solid #e2e8f0; padding-top: 16px; font-size: 11px; color: #94a3b8; text-align: center;">
+            <p style="margin: 0;">Pesan otomatis dari Sistem Pendataan Ayam Broiler. Mohon tidak membalas email ini.</p>
+          </div>
         </div>
       `,
       attachments,
-    });
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    const previewUrl = isEthereal ? nodemailer.getTestMessageUrl(info) : null;
 
     res.json({
       success: true,
-      isSimulated: false,
+      isSimulated: isEthereal,
       messageId: info.messageId,
-      message: `Laporan '${reportLabel}' berhasil dikirimkan ke ${toEmail} via Server SMTP!`,
+      previewUrl,
+      message: isEthereal
+        ? `Laporan '${reportLabel}' berhasil dikirim ke Mail Server (Web Inbox Preview Siap)!`
+        : `Laporan '${reportLabel}' berhasil dikirimkan langsung ke inbox ${toEmail}!`,
       details: {
         toEmail,
         recipientName,
         reportLabel,
         fileName,
         sentAt: new Date().toISOString(),
+        previewUrl,
+        note: isEthereal
+          ? 'Email terkirim ke server SMTP. Klik tombol "Buka & Lihat Email di Web Inbox" untuk melihat tampilan email asli beserta lampiran file.'
+          : 'Email terkirim langsung ke inbox Gmail/SMTP tujuan.',
       },
     });
   } catch (err) {

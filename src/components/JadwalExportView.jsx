@@ -21,6 +21,7 @@ import {
   Download,
   ShieldCheck,
   RefreshCw,
+  ExternalLink,
 } from 'lucide-react';
 import {
   exportPenjualanToPDF,
@@ -795,7 +796,7 @@ export function JadwalExportView({ kloters = [], users = [], auditLogs = [], act
 
               {/* SMTP Dispatch Info Note */}
               {sendResultModal.serverRes && (
-                <div className="bg-amber-50/90 border border-amber-200 rounded-2xl p-3.5 text-slate-800 space-y-1">
+                <div className="bg-amber-50/90 border border-amber-200 rounded-2xl p-3.5 text-slate-800 space-y-2">
                   <div className="font-extrabold text-amber-900 flex items-center gap-1.5 text-xs">
                     <ShieldCheck size={14} className="text-amber-600" />
                     <span>Status Server Email Dispatcher:</span>
@@ -803,6 +804,20 @@ export function JadwalExportView({ kloters = [], users = [], auditLogs = [], act
                   <p className="text-[11px] text-slate-600 leading-relaxed">
                     {sendResultModal.serverRes.message}
                   </p>
+                  {sendResultModal.serverRes.previewUrl && (
+                    <div className="pt-1.5">
+                      <a
+                        href={sendResultModal.serverRes.previewUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="w-full py-2.5 px-4 bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-700 hover:to-indigo-700 text-white rounded-xl font-extrabold text-xs flex items-center justify-center gap-2 shadow-md transition cursor-pointer"
+                      >
+                        <Mail size={16} />
+                        <span>Buka &amp; Lihat Email Terkirim di Web Inbox</span>
+                        <ExternalLink size={14} />
+                      </a>
+                    </div>
+                  )}
                   {sendResultModal.serverRes.details?.note && (
                     <p className="text-[10px] text-slate-500 italic pt-1 border-t border-amber-200/60">
                       💡 <strong>Catatan SMTP:</strong> {sendResultModal.serverRes.details.note}
