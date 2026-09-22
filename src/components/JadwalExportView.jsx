@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Send,
   Calendar,
@@ -32,35 +32,54 @@ import {
 import { Pagination } from './Pagination';
 
 export function JadwalExportView({ kloters = [], users = [], auditLogs = [], activeHargaPerOns }) {
-  const superAdminUser = (Array.isArray(users) && users.find((u) => u.role === 'super_admin')) || users[0];
-  
-  const [schedules, setSchedules] = useState(() => {
-    if (!superAdminUser) return [];
-    return [
-      {
-        id: 'SCH-001',
-        penerimaNama: `${superAdminUser.nama} (${superAdminUser.labelRole || 'Super Admin'})`,
-        penerimaEmail: superAdminUser.email,
-        tipeLaporan: 'master_excel',
-        labelLaporan: 'Master Backup Lengkap (Excel 7-Sheet)',
-        frekuensi: 'Harian',
-        detailJadwal: 'Setiap 1 Hari Sekali, Jam 08:00 WIB',
-        status: 'Aktif',
-        terakhirDikirim: 'Belum pernah',
-      },
-      {
-        id: 'SCH-002',
-        penerimaNama: `${superAdminUser.nama} (${superAdminUser.labelRole || 'Super Admin'})`,
-        penerimaEmail: superAdminUser.email,
-        tipeLaporan: 'penjualan_excel',
-        labelLaporan: 'Data Penjualan (Excel Transaksi)',
-        frekuensi: 'Mingguan',
-        detailJadwal: 'Setiap Hari Senin, Jam 08:00 WIB',
-        status: 'Aktif',
-        terakhirDikirim: 'Belum pernah',
-      },
-    ];
-  });
+  const superAdminUser =
+    (Array.isArray(users) && users.find((u) => u.role === 'super_admin')) ||
+    users[0] ||
+    { nama: 'Alvin Rifky', labelRole: 'Super Admin', email: 'alvinrifky81@gmail.com' };
+
+  const [schedules, setSchedules] = useState([
+    {
+      id: 'SCH-001',
+      penerimaNama: `${superAdminUser.nama} (${superAdminUser.labelRole || 'Super Admin'})`,
+      penerimaEmail: superAdminUser.email || 'alvinrifky81@gmail.com',
+      tipeLaporan: 'master_excel',
+      labelLaporan: 'Master Backup Lengkap (Excel 7-Sheet)',
+      frekuensi: 'Harian',
+      detailJadwal: 'Setiap 1 Hari Sekali, Jam 08:00 WIB',
+      status: 'Aktif',
+      terakhirDikirim: 'Belum pernah',
+    },
+    {
+      id: 'SCH-002',
+      penerimaNama: `${superAdminUser.nama} (${superAdminUser.labelRole || 'Super Admin'})`,
+      penerimaEmail: superAdminUser.email || 'alvinrifky81@gmail.com',
+      tipeLaporan: 'penjualan_excel',
+      labelLaporan: 'Data Penjualan (Excel Transaksi)',
+      frekuensi: 'Mingguan',
+      detailJadwal: 'Setiap Hari Senin, Jam 08:00 WIB',
+      status: 'Aktif',
+      terakhirDikirim: 'Belum pernah',
+    },
+  ]);
+
+  useEffect(() => {
+    if (Array.isArray(users) && users.length > 0) {
+      const activeSuperAdmin = users.find((u) => u.role === 'super_admin') || users[0];
+      if (activeSuperAdmin) {
+        setSchedules((prev) =>
+          prev.map((s) =>
+            s.id === 'SCH-001' || s.id === 'SCH-002'
+              ? {
+                  ...s,
+                  penerimaNama: `${activeSuperAdmin.nama} (${activeSuperAdmin.labelRole || 'Super Admin'})`,
+                  penerimaEmail: activeSuperAdmin.email,
+                }
+              : s
+          )
+        );
+      }
+    }
+  }, [users]);
 
   const [isTambahModalOpen, setIsTambahModalOpen] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState(null);
