@@ -7,7 +7,10 @@
 
 @layer base {
   :root {
-    --bg-main: #f0f7ff;
+    --bg-main: #f4f8fc;
+    --ink: #0f172a;
+    --muted: #64748b;
+    --accent: #0ea5e9;
     --font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
   }
 
@@ -17,13 +20,124 @@
 
   body {
     font-family: var(--font-family);
-    background-color: #f0f7ff;
-    color: #0f172a;
+    background-color: var(--bg-main);
+    color: var(--ink);
     -webkit-font-smoothing: antialiased;
     min-height: 100vh;
     overflow-x: hidden;
     max-width: 100vw;
   }
+}
+
+/* Brand direction: elegant blue and white, with restrained navy accents. */
+.app-shell {
+  background: var(--bg-main) !important;
+}
+
+.app-shell .app-sidebar {
+  background: #ffffff !important;
+  border-right-color: #dbeafe !important;
+  color: #0f172a;
+}
+
+.app-shell .app-sidebar .text-slate-900,
+.app-shell .app-sidebar .text-slate-600,
+.app-shell .app-sidebar .text-slate-400 {
+  color: #475569 !important;
+}
+
+.app-shell .app-sidebar .text-sky-600,
+.app-shell .app-sidebar .text-sky-700,
+.app-shell .app-sidebar .text-sky-800 {
+  color: #0369a1 !important;
+}
+
+.app-shell .app-sidebar .bg-sky-50 {
+  background: #eff6ff !important;
+}
+
+.app-shell .app-sidebar .border-sky-100,
+.app-shell .app-sidebar .border-sky-200 {
+  border-color: #bfdbfe !important;
+}
+
+.app-shell .app-sidebar .bg-sky-700 {
+  background: #0369a1 !important;
+  color: #ffffff !important;
+}
+
+.app-shell .bg-sky-600,
+.app-shell .bg-sky-700 {
+  background-color: #0284c7 !important;
+}
+
+.app-shell .bg-sky-600:hover,
+.app-shell .bg-sky-700:hover {
+  background-color: #0369a1 !important;
+}
+
+.app-shell .text-sky-600,
+.app-shell .text-sky-700,
+.app-shell .text-sky-800,
+.app-shell .text-sky-900 {
+  color: #0369a1 !important;
+}
+
+.app-shell .border-sky-100,
+.app-shell .border-sky-200,
+.app-shell .border-sky-300 {
+  border-color: #dbeafe !important;
+}
+
+.app-shell .bg-sky-50,
+.app-shell .bg-sky-50\/70 {
+  background-color: #f0f9ff !important;
+}
+
+.app-shell .text-emerald-700 {
+  color: #15803d !important;
+}
+
+.app-shell .btn-primary {
+  background: linear-gradient(135deg, #0284c7, #0369a1);
+  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.2);
+}
+
+.app-shell .btn-primary:hover {
+  background: linear-gradient(135deg, #0369a1, #075985);
+  color: #ffffff;
+}
+
+.app-shell .mobile-bottom-bar {
+  background: rgba(255, 255, 255, 0.96) !important;
+  border-top-color: #bfdbfe;
+}
+
+.app-shell .mobile-nav-btn,
+.app-shell .mobile-nav-btn.active {
+  color: #64748b;
+}
+
+.app-shell .mobile-nav-btn.active {
+  color: #0369a1;
+}
+
+.app-shell .page-title-group h1,
+.app-shell h1,
+.app-shell h2,
+.app-shell h3 {
+  color: #0f172a;
+}
+
+.app-shell .card,
+.app-shell .kpi-card,
+.app-shell .table-container {
+  border-color: #dbeafe;
+  box-shadow: 0 8px 24px rgba(14, 165, 233, 0.06);
+}
+
+.app-shell .kpi-card::before {
+  background: linear-gradient(90deg, #38bdf8, #0284c7);
 }
 
 /* Custom Component Classes */
@@ -361,6 +475,14 @@
   transition: all 0.2s ease;
 }
 
+.form-input-prefix {
+  padding-left: 2.75rem !important;
+}
+
+.form-input-icon {
+  padding-left: 2.5rem !important;
+}
+
 .form-input:focus, .form-select:focus, .form-textarea:focus {
   border-color: #0ea5e9;
   box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.15);
@@ -488,10 +610,136 @@
 
 /* Ensure page content doesn't get hidden behind bottom nav */
 @media (max-width: 768px) {
+  .app-main {
+    padding: 0.85rem !important;
+    padding-bottom: calc(5.25rem + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  .page-header {
+    align-items: stretch;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+
+  .page-title-group h1 {
+    font-size: 1.2rem;
+  }
+
+  .page-title-group p {
+    font-size: 0.76rem;
+  }
+
+  .page-header > .btn,
+  .page-header > button {
+    width: 100%;
+  }
+
+  .card {
+    padding: 0.9rem;
+    border-radius: 0.85rem;
+  }
+
+  .kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.55rem;
+    margin-bottom: 1rem;
+  }
+
+  .kpi-card {
+    padding: 0.85rem;
+    border-radius: 0.8rem;
+  }
+
+  .kpi-title {
+    font-size: 0.66rem;
+  }
+
+  .kpi-value {
+    font-size: 1.05rem;
+    overflow-wrap: anywhere;
+  }
+
+  .kpi-subtext {
+    font-size: 0.68rem;
+  }
+
+  .kpi-icon-box {
+    width: 30px;
+    height: 30px;
+  }
+
+  .modal-overlay {
+    align-items: flex-end;
+    padding: 0.5rem;
+  }
+
+  .modal-content {
+    max-height: 94vh;
+    border-radius: 1rem 1rem 0.75rem 0.75rem;
+  }
+
+  .modal-header,
+  .modal-body,
+  .modal-footer {
+    padding-left: 0.9rem;
+    padding-right: 0.9rem;
+  }
+
+  .modal-content .grid.grid-cols-2,
+  .modal-content .grid.grid-cols-3 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .modal-footer {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .modal-footer .btn,
+  .modal-footer button {
+    width: 100%;
+  }
+
   .mobile-bottom-bar {
     display: block;
+    padding-left: 0.15rem;
+    padding-right: 0.15rem;
+    backdrop-filter: blur(12px);
+    background: rgba(255, 255, 255, 0.96);
   }
+
+  .mobile-nav-items {
+    justify-content: flex-start;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .mobile-nav-items::-webkit-scrollbar {
+    display: none;
+  }
+
+  .mobile-nav-btn {
+    flex: 0 0 68px;
+    min-height: 2.9rem;
+    font-size: 0.6rem;
+  }
+
   .page-container {
     padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0px)) !important;
+  }
+}
+
+@media (max-width: 380px) {
+  .app-main {
+    padding-left: 0.65rem !important;
+    padding-right: 0.65rem !important;
+  }
+
+  .kpi-card {
+    padding: 0.7rem;
+  }
+
+  .kpi-value {
+    font-size: 0.95rem;
   }
 }

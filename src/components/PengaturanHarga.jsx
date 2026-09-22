@@ -120,15 +120,22 @@ export function PengaturanHarga({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="form-group">
               <label className="form-label">Harga Per Ons Baru (Rp):</label>
-              <input
-                type="number"
-                className="form-input"
-                value={hargaBaruInput}
-                onChange={(e) => setHargaBaruInput(e.target.value)}
-                required
-                min="1000"
-                step="100"
-              />
+              <div className="relative flex items-center">
+                <span className="absolute left-3 text-xs font-bold text-slate-400 select-none pointer-events-none">Rp</span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  className="form-input form-input-prefix font-bold tracking-wide"
+                  placeholder="7.500"
+                  value={Number(hargaBaruInput) > 0 ? Number(hargaBaruInput).toLocaleString('id-ID') : ''}
+                  onChange={(e) => {
+                    const raw = e.target.value.replace(/\./g, '').replace(/[^0-9]/g, '');
+                    setHargaBaruInput(Number(raw) || 0);
+                  }}
+                  required
+                />
+              </div>
+              <span className="form-help">Titik ribuan muncul otomatis.</span>
             </div>
 
             <div className="form-group">

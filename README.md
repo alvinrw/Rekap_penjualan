@@ -81,7 +81,7 @@ Relasi: `kloters` 1—N `pengeluarans`, `kematian_ayams`, `panens`, `data_penjua
 
 ## Tech Stack
 
-Mengikuti struktur proyek yang ada (model seperti `Kloter.php`, `KematianAyam`, `Pengeluaran`, `Panen`, `DataPenjualan`, `KloterSummary`), yang mengarah ke **Laravel (PHP)**. Sesuaikan bagian ini dan bagian instalasi di bawah kalau stack aslinya berbeda.
+React + Vite, Express serverless API di Vercel, Prisma ORM, dan PostgreSQL Supabase.
 
 ## Instalasi
 
@@ -98,8 +98,9 @@ npm install
 cp .env.example .env
 php artisan key:generate
 
-# 4. Atur koneksi database di .env, lalu migrasi + seed
-php artisan migrate --seed
+# 4. Isi DATABASE_URL dari Supabase, lalu buat tabel dan data awal
+npx prisma db push
+npm run prisma:seed
 
 # 5. Jalankan
 npm run dev
@@ -113,18 +114,10 @@ Seeder default sebaiknya membuat:
 ## Konfigurasi `.env` (contoh)
 
 ```env
-APP_NAME="Pendataan Ayam"
-APP_ENV=local
-APP_URL=http://localhost:8000
-APP_LOCALE=id
-APP_TIMEZONE=Asia/Jakarta
+DATABASE_URL="postgresql://postgres.PROJECT_REF:PASSWORD@aws-0-REGION.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1"
 
-DB_CONNECTION=mysql
-DB_HOST=127.0.0.1
-DB_PORT=3306
-DB_DATABASE=pendataan_ayam
-DB_USERNAME=root
-DB_PASSWORD=
+Untuk Vercel, tambahkan variable yang sama di Project Settings > Environment Variables
+untuk Preview dan Production. Jangan commit `.env` atau password database ke repository.
 ```
 
 ## Halaman

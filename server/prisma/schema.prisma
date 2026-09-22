@@ -1,0 +1,134 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id         String   @id @default(cuid())
+  nama       String
+  username   String   @unique
+  email      String?
+  password   String
+  role       String   @default("viewer") // super_admin | admin | viewer
+  labelRole  String   @default("Viewer / Pengawas")
+  status     String   @default("Aktif")
+  isOnline   Boolean  @default(false)
+  lastLogin  String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model Kloter {
+  id              String         @id
+  namaKloter      String
+  kandang         String
+  tanggalBeliDoc  String
+  docAwal         Int
+  hargaDocPerEkor Float
+  status          String         @default("Aktif") // Aktif | Panen | Penjualan | Selesai
+  catatanAwal     String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  pengeluaranList Pengeluaran[]
+  kematianList    Kematian[]
+  panenList       Panen[]
+  penjualanList   Penjualan[]
+}
+
+model Pengeluaran {
+  id          String   @id
+  kloterId    String
+  kloter      Kloter   @relation(fields: [kloterId], references: [id], onDelete: Cascade)
+  tanggal     String
+  kategori    String
+  keterangan  String
+  jumlahKg    Float    @default(0)
+  jumlahRp    Float
+  dicatatOleh String
+  createdAt   DateTime @default(now())
+}
+
+model Kematian {
+  id          String   @id
+  kloterId    String
+  kloter      Kloter   @relation(fields: [kloterId], references: [id], onDelete: Cascade)
+  tanggal     String
+  jumlahEkor  Int
+  penyebab    String
+  dicatatOleh String
+  createdAt   DateTime @default(now())
+}
+
+model Panen {
+  id          String   @id
+  kloterId    String
+  kloter      Kloter   @relation(fields: [kloterId], references: [id], onDelete: Cascade)
+  tanggal     String
+  jumlahEkor  Int
+  catatan     String?
+  dicatatOleh String
+  createdAt   DateTime @default(now())
+}
+
+model Penjualan {
+  id                  String   @id
+  noStruk             String?
+  kloterId            String
+  kloter              Kloter   @relation(fields: [kloterId], references: [id], onDelete: Cascade)
+  tanggal             String
+  pembeli             String
+  kategoriPembeli     String?  @default("Pembeli Toko")
+  jumlahEkor          Int?     @default(0)
+  beratGram           Float
+  hargaPerOnsSnapshot Float
+  totalHarga          Float
+  metodePembayaran    String   @default("Transfer Bank (Lunas)")
+  catatanNota         String?
+  dicatatOleh         String
+  createdAt           DateTime @default(now())
+}
+
+model HargaConfig {
+  id                 Int      @id @default(1)
+  hargaPerOnsAktif   Float    @default(7500)
+  berlakuMulai       String
+  terakhirDiubahOleh String   @default("System")
+  updatedAt          DateTime @updatedAt
+}
+
+model RiwayatHarga {
+  id          String   @id
+  hargaPerOns Float
+  berlakuMulai String
+  diubahOleh  String
+  catatan     String
+  createdAt   DateTime @default(now())
+}
+
+model AuditLog {
+  id          String   @id
+  timestamp   String
+  user        String
+  modul       String
+  aksi        String
+  deskripsi   String
+  createdAt   DateTime @default(now())
+}
+
+model JadwalExport {
+  id           String   @id
+  targetEmail  String?
+  targetUserId String?
+  targetUserNama String?
+  periode      String   // mingguan | bulanan | harian
+  hari         String?  // Senin, Selasa, dll
+  jam          String   // 08:00
+  jenisLaporan String   // penjualan | kloter | bulanan_lengkap
+  statusAktif  Boolean  @default(true)
+  createdAt    DateTime @default(now())
+}

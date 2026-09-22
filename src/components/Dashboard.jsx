@@ -9,6 +9,7 @@ import {
   Building2,
   CheckCircle2,
   TrendingUp,
+  Scale,
 } from 'lucide-react';
 import {
   calculateKloterMetrics,
@@ -35,6 +36,11 @@ export function Dashboard({
   const activeKloters = allMetrics.filter((m) => m.kloter.status === 'Aktif' || m.kloter.status === 'Panen');
   const totalSisaAyamHidup = activeKloters.reduce((sum, m) => sum + m.metrics.sisaAyamHidup, 0);
   const totalDocAktif = activeKloters.reduce((sum, m) => sum + m.metrics.docAwal, 0);
+  const totalPemasukanSemua = allMetrics.reduce((sum, m) => sum + m.metrics.totalPemasukan, 0);
+  const totalAyamTerjualSemua = allMetrics.reduce(
+    (sum, m) => sum + Math.max(m.metrics.totalEkorTerjual || 0, m.metrics.totalEkorDipanen || 0),
+    0
+  );
 
   const avgMortalityRate =
     allMetrics.length > 0
@@ -57,7 +63,8 @@ export function Dashboard({
     selectedKloterId === 'semua'
       ? {
           docAwal: allMetrics.reduce((s, m) => s + m.metrics.docAwal, 0),
-          totalEkorDipanen: allMetrics.reduce((s, m) => s + m.metrics.totalEkorDipanen, 0),
+          totalEkorDipanen: allMetrics.reduce((s, m) => s + Math.max(m.metrics.totalEkorTerjual || 0, m.metrics.totalEkorDipanen || 0), 0),
+          totalEkorTerjual: allMetrics.reduce((s, m) => s + Math.max(m.metrics.totalEkorTerjual || 0, m.metrics.totalEkorDipanen || 0), 0),
           sisaAyamHidup: allMetrics.reduce((s, m) => s + m.metrics.sisaAyamHidup, 0),
           totalKematian: allMetrics.reduce((s, m) => s + m.metrics.totalKematian, 0),
           totalPemasukan: allMetrics.reduce((s, m) => s + m.metrics.totalPemasukan, 0),
@@ -68,6 +75,7 @@ export function Dashboard({
       : allMetrics.find((m) => m.kloter.id === selectedKloterId)?.metrics || {
           docAwal: 1,
           totalEkorDipanen: 0,
+          totalEkorTerjual: 0,
           sisaAyamHidup: 0,
           totalKematian: 0,
           totalPemasukan: 0,
@@ -110,14 +118,14 @@ export function Dashboard({
         </div>
       )}
 
-      {/* KPI Cards Grid */}
-      <div className="kpi-grid">
+      {/* Top KPI Cards Grid — 6 Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3.5">
         {/* Card 1: Jumlah Kloter */}
         <div className="kpi-card">
           <div className="kpi-header">
             <span className="kpi-title">Jumlah Kloter</span>
             <div className="kpi-icon-box">
-              <Building2 size={20} />
+              <Building2 size={18} />
             </div>
           </div>
           <div className="kpi-value">{kloters.length} Kloter</div>
@@ -126,26 +134,54 @@ export function Dashboard({
           </div>
         </div>
 
-        {/* Card 2: Kloter Aktif & Sisa Ayam */}
+        {/* Card 2: Total Uang Penjualan */}
         <div className="kpi-card">
           <div className="kpi-header">
-            <span className="kpi-title">Stok Ayam Hidup</span>
-            <div className="kpi-icon-box">
-              <Boxes size={20} />
+            <span className="kpi-title">Total Uang Penjualan</span>
+            <div className="kpi-icon-box bg-emerald-100">
+              <TrendingUp size={18} className="text-emerald-700" />
             </div>
           </div>
-          <div className="kpi-value">{formatNumber(totalSisaAyamHidup)} Ekor</div>
+          <div className="kpi-value text-emerald-700">{formatRupiah(totalPemasukanSemua)}</div>
+          <div className="kpi-subtext text-emerald-800 font-medium">
+            Hasil Uang Penjualan
+          </div>
+        </div>
+
+        {/* Card 3: Total Ayam Terjual */}
+        <div className="kpi-card">
+          <div className="kpi-header">
+            <span className="kpi-title">Total Ayam Terjual</span>
+            <div className="kpi-icon-box bg-blue-100">
+              <CheckCircle2 size={18} className="text-blue-700" />
+            </div>
+          </div>
+          <div className="kpi-value text-blue-800">{formatNumber(totalAyamTerjualSemua)} Ekor</div>
+          <div className="kpi-subtext">
+            Sudah Terjual / Laku
+          </div>
+        </div>
+
+        {/* Card 4: Stok Ayam Siap Jual */}
+        <div className="kpi-card">
+          <div className="kpi-header">
+            <span className="kpi-title">Stok Ayam Siap Jual</span>
+            <div className="kpi-icon-box bg-sky-100">
+              <Boxes size={18} className="text-sky-700" />
+            </div>
+          </div>
+          <div className="kpi-value text-sky-800">{formatNumber(totalSisaAyamHidup)} Ekor</div>
           <div className="kpi-subtext">
             DOC Aktif: {formatNumber(totalDocAktif)} Ekor
           </div>
         </div>
 
-        {/* Card 3: Rata-Rata Mortality Rate */}
+        {/* Card 5: Mortality Rate Rata-Rata */}
         <div className={`kpi-card ${avgMortalityRate > 2.5 ? 'danger' : ''}`}>
           <div className="kpi-header">
-            <span className="kpi-title">Mortality Rate Rata-Rata</span>
+            <span className="kpi-title">Mortality Rate</span>
             <div className="kpi-icon-box">
-              <Activity size={20} />
+              <Activity size={18} />
             </div>
           </div>
           <div className="kpi-value">{formatNumber(avgMortalityRate, 2)} %</div>
@@ -154,26 +190,12 @@ export function Dashboard({
           </div>
         </div>
 
-        {/* Card 4: Rata-Rata FCR */}
-        <div className="kpi-card">
-          <div className="kpi-header">
-            <span className="kpi-title">FCR (Feed Ratio)</span>
-            <div className="kpi-icon-box">
-              <FileSpreadsheet size={20} />
-            </div>
-          </div>
-          <div className="kpi-value">{formatNumber(avgFcr, 2)}</div>
-          <div className="kpi-subtext">
-            Rasio Pakan / Kg Penjualan
-          </div>
-        </div>
-
-        {/* Card 5: Net Profit Terakumulasi */}
+        {/* Card 6: Net Profit Terakumulasi */}
         <div className={`kpi-card ${totalAccumulatedProfit >= 0 ? 'success' : 'danger'}`}>
           <div className="kpi-header">
-            <span className="kpi-title">Net Profit Terakumulasi</span>
+            <span className="kpi-title">Net Profit</span>
             <div className="kpi-icon-box">
-              <Coins size={20} />
+              <Coins size={18} />
             </div>
           </div>
           <div className="kpi-value">{formatRupiah(totalAccumulatedProfit)}</div>
@@ -275,7 +297,7 @@ export function Dashboard({
 
             <div className="mt-3 text-[11px] font-bold text-slate-500 text-center">
               {selectedKloterId === 'semua'
-                ? 'Akumulasi 3 Kloter Terdaftar'
+                ? `Akumulasi ${kloters.length} Kloter Terdaftar`
                 : kloters.find((k) => k.id === selectedKloterId)?.namaKloter}
             </div>
           </div>
@@ -286,33 +308,50 @@ export function Dashboard({
               Rincian Distribusi & Indikator Performa
             </h4>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Box 1: Terjual / Dipanen */}
               <div className="p-3.5 bg-sky-50 border border-sky-200 rounded-xl space-y-1">
                 <div className="flex items-center gap-2">
                   <span className="w-3 h-3 rounded-full bg-sky-600 inline-block"></span>
-                  <span className="text-xs font-bold text-slate-700">Terjual / Dipanen</span>
+                  <span className="text-xs font-bold text-slate-700">Ayam Terjual / Dipanen</span>
                 </div>
                 <div className="text-lg font-extrabold text-sky-900">
-                  {formatNumber(selectedMetricsData.totalEkorDipanen)} <span className="text-xs font-normal">ekor</span>
+                  {formatNumber(Math.max(selectedMetricsData.totalEkorTerjual || 0, selectedMetricsData.totalEkorDipanen || 0))} <span className="text-xs font-normal">ekor</span>
                 </div>
                 <div className="text-[11px] font-bold text-sky-700">
                   {formatNumber(pctPanen, 1)}% dari total populasi
                 </div>
               </div>
 
+              {/* Box 2: Total Uang Penjualan */}
+              <div className="p-3.5 bg-indigo-50 border border-indigo-200 rounded-xl space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full bg-indigo-600 inline-block"></span>
+                  <span className="text-xs font-bold text-slate-700">Dapat Duit Penjualan</span>
+                </div>
+                <div className="text-lg font-extrabold text-indigo-900">
+                  {formatRupiah(selectedMetricsData.totalPemasukan)}
+                </div>
+                <div className="text-[11px] font-bold text-indigo-700">
+                  Hasil omset penjualan
+                </div>
+              </div>
+
+              {/* Box 3: Stok Ayam Siap Jual */}
               <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl space-y-1">
                 <div className="flex items-center gap-2">
                   <span className="w-3 h-3 rounded-full bg-emerald-600 inline-block"></span>
-                  <span className="text-xs font-bold text-slate-700">Stok Ayam Hidup</span>
+                  <span className="text-xs font-bold text-slate-700">Stok Ayam Siap Jual</span>
                 </div>
                 <div className="text-lg font-extrabold text-emerald-900">
                   {formatNumber(selectedMetricsData.sisaAyamHidup)} <span className="text-xs font-normal">ekor</span>
                 </div>
                 <div className="text-[11px] font-bold text-emerald-700">
-                  {formatNumber(pctSisa, 1)}% belum dipanen
+                  {formatNumber(pctSisa, 1)}% sisa di kandang
                 </div>
               </div>
 
+              {/* Box 4: Total Kematian */}
               <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl space-y-1">
                 <div className="flex items-center gap-2">
                   <span className="w-3 h-3 rounded-full bg-red-500 inline-block"></span>
@@ -328,7 +367,13 @@ export function Dashboard({
             </div>
 
             {/* Quick Metrics Summary Bar */}
-            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+              <div>
+                <span className="text-slate-500 font-semibold block text-[11px]">Usia Ayam:</span>
+                <strong className="text-amber-700 font-extrabold text-sm">
+                  {selectedMetricsData.usiaAyamHari} Hari
+                </strong>
+              </div>
               <div>
                 <span className="text-slate-500 font-semibold block text-[11px]">Rasio Pakan (FCR):</span>
                 <strong className="text-slate-900 font-bold text-sm">
@@ -341,7 +386,7 @@ export function Dashboard({
                   {formatRupiah(selectedMetricsData.totalPemasukan)}
                 </strong>
               </div>
-              <div className="col-span-2 sm:col-span-1">
+              <div>
                 <span className="text-slate-500 font-semibold block text-[11px]">Estimasi Net Profit:</span>
                 <strong className={selectedMetricsData.netProfit >= 0 ? 'text-emerald-700 font-bold text-sm' : 'text-red-600 font-bold text-sm'}>
                   {formatRupiah(selectedMetricsData.netProfit)}

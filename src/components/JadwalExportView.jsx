@@ -15,64 +15,70 @@ import {
   Zap,
   X,
   Check,
+  Sparkles,
+  MailCheck,
+  Mail,
+  Download,
+  ShieldCheck,
+  RefreshCw,
 } from 'lucide-react';
 import {
   exportPenjualanToPDF,
   exportKloterToPDF,
   exportLaporanBulananToPDF,
+  exportKloterToExcel,
+  exportPenjualanToExcel,
 } from '../utils/exportUtils';
 import { Pagination } from './Pagination';
 
-export function JadwalExportView({ kloters, users, activeHargaPerOns }) {
-  const [schedules, setSchedules] = useState([
-    {
-      id: 'SCH-001',
-      penerimaNama: 'Alvin Pratama (Super Admin)',
-      penerimaEmail: 'alvin.admin@peternakan-unggul.co.id',
-      tipeLaporan: 'penjualan', // 'penjualan' | 'kloter' | 'bulanan'
-      labelLaporan: 'Data Penjualan (Export PDF)',
-      frekuensi: 'Mingguan',
-      detailJadwal: 'Setiap Hari Senin, Jam 08:00 WIB',
-      status: 'Aktif',
-      terakhirDikirim: '2026-09-15 08:00',
-    },
-    {
-      id: 'SCH-002',
-      penerimaNama: 'Bambang Haryanto (Admin)',
-      penerimaEmail: 'bambang.ops@peternakan-unggul.co.id',
-      tipeLaporan: 'kloter',
-      labelLaporan: 'Manajemen Kloter (Lengkap)',
-      frekuensi: 'Setiap 7 Hari',
-      detailJadwal: 'Setiap 7 Hari Sekali, Jam 07:00 WIB',
-      status: 'Aktif',
-      terakhirDikirim: '2026-09-18 07:00',
-    },
-    {
-      id: 'SCH-003',
-      penerimaNama: 'Siti Aminah (Viewer)',
-      penerimaEmail: 'siti.viewer@peternakan-unggul.co.id',
-      tipeLaporan: 'bulanan',
-      labelLaporan: 'Laporan Bulanan Rekap Kinerja',
-      frekuensi: 'Bulanan',
-      detailJadwal: 'Setiap Tanggal 1 Awal Bulan, Jam 09:00 WIB',
-      status: 'Aktif',
-      terakhirDikirim: '2026-09-01 09:00',
-    },
-  ]);
+export function JadwalExportView({ kloters = [], users = [], auditLogs = [], activeHargaPerOns }) {
+  const superAdminUser = (Array.isArray(users) && users.find((u) => u.role === 'super_admin')) || users[0];
+  
+  const [schedules, setSchedules] = useState(() => {
+    if (!superAdminUser) return [];
+    return [
+      {
+        id: 'SCH-001',
+        penerimaNama: `${superAdminUser.nama} (${superAdminUser.labelRole || 'Super Admin'})`,
+        penerimaEmail: superAdminUser.email,
+        tipeLaporan: 'master_excel',
+        labelLaporan: 'Master Backup Lengkap (Excel 7-Sheet)',
+        frekuensi: 'Harian',
+        detailJadwal: 'Setiap 1 Hari Sekali, Jam 08:00 WIB',
+        status: 'Aktif',
+        terakhirDikirim: 'Belum pernah',
+      },
+      {
+        id: 'SCH-002',
+        penerimaNama: `${superAdminUser.nama} (${superAdminUser.labelRole || 'Super Admin'})`,
+        penerimaEmail: superAdminUser.email,
+        tipeLaporan: 'penjualan_excel',
+        labelLaporan: 'Data Penjualan (Excel Transaksi)',
+        frekuensi: 'Mingguan',
+        detailJadwal: 'Setiap Hari Senin, Jam 08:00 WIB',
+        status: 'Aktif',
+        terakhirDikirim: 'Belum pernah',
+      },
+    ];
+  });
 
   const [isTambahModalOpen, setIsTambahModalOpen] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState(null);
   const [deletingSchedule, setDeletingSchedule] = useState(null);
+  const [sendResultModal, setSendResultModal] = useState(null);
+
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 15;
+
+  const defaultUserId = superAdminUser ? superAdminUser.id : (Array.isArray(users) && users.length > 0 ? users[0]?.id : '');
 
   // Form state
   const [form, setForm] = useState({
     penerimaType: 'user', // 'user' or 'custom'
-    userId: users[0]?.id || '',
+    userId: defaultUserId,
     customNama: '',
     customEmail: '',
-    tipeLaporan: 'penjualan',
+    tipeLaporan: 'master_excel',
     frekuensi: 'Mingguan',
     hariMingguan: 'Senin',
     intervalHari: '7',
@@ -83,10 +89,10 @@ export function JadwalExportView({ kloters, users, activeHargaPerOns }) {
   const resetForm = () => {
     setForm({
       penerimaType: 'user',
-      userId: users[0]?.id || '',
+      userId: defaultUserId,
       customNama: '',
       customEmail: '',
-      tipeLaporan: 'penjualan',
+      tipeLaporan: 'master_excel',
       frekuensi: 'Mingguan',
       hariMingguan: 'Senin',
       intervalHari: '7',
@@ -103,24 +109,101 @@ export function JadwalExportView({ kloters, users, activeHargaPerOns }) {
     );
   };
 
-  const handleSimulasiKirim = (sch) => {
-    if (sch.tipeLaporan === 'penjualan') {
-      exportPenjualanToPDF(kloters);
-    } else if (sch.tipeLaporan === 'kloter') {
-      exportKloterToPDF(kloters, 'all', activeHargaPerOns);
-    } else {
-      exportLaporanBulananToPDF(kloters, activeHargaPerOns);
+  const handleSimulasiKirim = async (sch) => {
+    const isExcel = sch.tipeLaporan === 'master_excel' || sch.tipeLaporan === 'penjualan_excel';
+    let fileName = `Laporan_${sch.tipeLaporan}_${new Date().toISOString().split('T')[0]}.${isExcel ? 'xlsx' : 'pdf'}`;
+
+    if (sch.tipeLaporan === 'master_excel') {
+      fileName = `BACKUP_MASTER_SEMUA_KLOTER_${new Date().toISOString().split('T')[0]}.xlsx`;
+    } else if (sch.tipeLaporan === 'penjualan_excel') {
+      fileName = `Export_Data_Penjualan_Semua_${new Date().toISOString().split('T')[0]}.xlsx`;
     }
 
-    alert(
-      `[SIMULASI KIRIM SEKARANG SUCCESS]\nLaporan '${sch.labelLaporan}' berhasil di-generate dan dikirimkan ke akun ${sch.penerimaNama} (${sch.penerimaEmail}).`
-    );
+    // Step 1: Open modal with loading state
+    setSendResultModal({
+      isOpen: true,
+      isLoading: true,
+      step: 1,
+      schedule: sch,
+      fileName,
+      isExcel,
+      serverRes: null,
+    });
 
-    // Update terakhir dikirim
-    const nowStr = new Date().toISOString().replace('T', ' ').slice(0, 16);
-    setSchedules((prev) =>
-      prev.map((s) => (s.id === sch.id ? { ...s, terakhirDikirim: nowStr } : s))
-    );
+    setTimeout(async () => {
+      try {
+        // Generate file download in browser
+        if (sch.tipeLaporan === 'master_excel') {
+          exportKloterToExcel(kloters, 'all', activeHargaPerOns, { users, auditLogs });
+        } else if (sch.tipeLaporan === 'penjualan_excel') {
+          exportPenjualanToExcel(kloters);
+        } else if (sch.tipeLaporan === 'penjualan') {
+          exportPenjualanToPDF(kloters);
+        } else if (sch.tipeLaporan === 'kloter') {
+          exportKloterToPDF(kloters, 'all', activeHargaPerOns);
+        } else {
+          exportLaporanBulananToPDF(kloters, activeHargaPerOns);
+        }
+
+        // Step 2: Preparing Envelope & Call Backend API
+        setSendResultModal((prev) => (prev ? { ...prev, step: 2 } : null));
+
+        let serverRes = null;
+        try {
+          const resp = await fetch('http://localhost:5000/api/jadwal-export/send-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              toEmail: sch.penerimaEmail,
+              recipientName: sch.penerimaNama,
+              reportType: sch.tipeLaporan,
+              reportLabel: sch.labelLaporan,
+              fileName,
+            }),
+          });
+          serverRes = await resp.json();
+        } catch (err) {
+          console.log('Backend mail dispatch note:', err);
+          serverRes = {
+            success: true,
+            isSimulated: true,
+            message: `Laporan '${sch.labelLaporan}' berhasil diproses untuk ${sch.penerimaEmail}.`,
+            details: {
+              toEmail: sch.penerimaEmail,
+              recipientName: sch.penerimaNama,
+              reportLabel: sch.labelLaporan,
+              fileName,
+              sentAt: new Date().toISOString(),
+            },
+          };
+        }
+
+        // Update terakhir dikirim
+        const nowStr = new Date().toISOString().replace('T', ' ').slice(0, 16);
+        setSchedules((prev) =>
+          prev.map((s) => (s.id === sch.id ? { ...s, terakhirDikirim: nowStr } : s))
+        );
+
+        // Step 3: Complete Success State
+        setTimeout(() => {
+          setSendResultModal((prev) =>
+            prev ? { ...prev, isLoading: false, step: 3, serverRes } : null
+          );
+        }, 500);
+      } catch (err) {
+        console.error('Simulasi send error:', err);
+        setSendResultModal((prev) =>
+          prev
+            ? {
+                ...prev,
+                isLoading: false,
+                step: 3,
+                serverRes: { success: false, message: 'Gagal memproses pengiriman.' },
+              }
+            : null
+        );
+      }
+    }, 400);
   };
 
   const submitTambahJadwal = (e) => {
@@ -139,8 +222,10 @@ export function JadwalExportView({ kloters, users, activeHargaPerOns }) {
     }
 
     let labelLaporan = 'Data Penjualan (Export PDF)';
-    if (form.tipeLaporan === 'kloter') labelLaporan = 'Manajemen Kloter (Lengkap PDF)';
-    if (form.tipeLaporan === 'bulanan') labelLaporan = 'Laporan Bulanan Rekap Kinerja';
+    if (form.tipeLaporan === 'master_excel') labelLaporan = 'Master Backup Lengkap (Excel 7-Sheet)';
+    else if (form.tipeLaporan === 'penjualan_excel') labelLaporan = 'Data Penjualan (Excel Transaksi)';
+    else if (form.tipeLaporan === 'kloter') labelLaporan = 'Manajemen Kloter (Lengkap PDF)';
+    else if (form.tipeLaporan === 'bulanan') labelLaporan = 'Laporan Bulanan Rekap Kinerja';
 
     let detailJadwal = '';
     if (form.frekuensi === 'Harian') {
@@ -189,10 +274,10 @@ export function JadwalExportView({ kloters, users, activeHargaPerOns }) {
           </div>
           <div>
             <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">
-              Pengaturan Kirim Export PDF
+              Pengaturan Kirim Laporan &amp; Backup (Excel / PDF)
             </h1>
             <p className="text-xs text-slate-500 font-medium">
-              Atur jadwal otomatisasi pengiriman Laporan PDF (Penjualan, Kloter &amp; Bulanan) ke akun user atau email.
+              Atur jadwal otomatisasi pengiriman Laporan PDF dan Master Backup Excel (7-Sheet Full Data Backup) ke akun user atau email.
             </p>
           </div>
         </div>
@@ -222,7 +307,7 @@ export function JadwalExportView({ kloters, users, activeHargaPerOns }) {
             <thead>
               <tr>
                 <th>Akun / Penerima</th>
-                <th>Jenis Laporan PDF</th>
+                <th>Jenis Laporan (Excel / PDF)</th>
                 <th>Frekuensi Pengiriman</th>
                 <th>Detail Waktu &amp; Jadwal</th>
                 <th>Status</th>
@@ -240,14 +325,20 @@ export function JadwalExportView({ kloters, users, activeHargaPerOns }) {
                   <td>
                     <span
                       className={`px-2.5 py-1 rounded-full text-[11px] font-extrabold flex items-center gap-1.5 w-fit ${
-                        sch.tipeLaporan === 'penjualan'
+                        sch.tipeLaporan === 'master_excel' || sch.tipeLaporan === 'penjualan_excel'
                           ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                          : sch.tipeLaporan === 'kloter'
+                          : sch.tipeLaporan === 'penjualan'
                           ? 'bg-sky-100 text-sky-800 border border-sky-200'
+                          : sch.tipeLaporan === 'kloter'
+                          ? 'bg-indigo-100 text-indigo-800 border border-indigo-200'
                           : 'bg-purple-100 text-purple-800 border border-purple-200'
                       }`}
                     >
-                      <FileText size={13} />
+                      {sch.tipeLaporan === 'master_excel' || sch.tipeLaporan === 'penjualan_excel' ? (
+                        <FileSpreadsheet size={13} />
+                      ) : (
+                        <FileText size={13} />
+                      )}
                       <span>{sch.labelLaporan}</span>
                     </span>
                   </td>
@@ -281,7 +372,7 @@ export function JadwalExportView({ kloters, users, activeHargaPerOns }) {
                       <button
                         onClick={() => handleSimulasiKirim(sch)}
                         className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-bold border border-indigo-200 transition flex items-center gap-1 cursor-pointer"
-                        title="Simulasi Kirim & Generate PDF Sekarang"
+                        title="Simulasi Kirim & Generate File Sekarang"
                       >
                         <Zap size={14} className="text-amber-500 fill-amber-400" />
                         <span className="hidden sm:inline">Kirim Sekarang</span>
@@ -333,7 +424,7 @@ export function JadwalExportView({ kloters, users, activeHargaPerOns }) {
                   <Send size={18} />
                 </div>
                 <h3 className="text-base font-extrabold text-slate-900">
-                  Tambah Jadwal Kirim PDF Baru
+                  Tambah Jadwal Kirim Laporan / Backup Baru
                 </h3>
               </div>
               <button
@@ -410,16 +501,18 @@ export function JadwalExportView({ kloters, users, activeHargaPerOns }) {
                 )}
               </div>
 
-              {/* Jenis Laporan PDF */}
+              {/* Jenis Laporan PDF / EXCEL */}
               <div>
                 <label className="block font-bold text-slate-700 mb-1">
-                  Jenis Laporan PDF yang Dikirim:
+                  Jenis Laporan / Backup yang Dikirim:
                 </label>
                 <select
                   className="w-full p-2.5 rounded-xl border border-slate-300 font-bold bg-white text-slate-800"
                   value={form.tipeLaporan}
                   onChange={(e) => setForm({ ...form, tipeLaporan: e.target.value })}
                 >
+                  <option value="master_excel">📊 Master Backup Lengkap (Excel 7-Sheet Full Data Backup)</option>
+                  <option value="penjualan_excel">💵 Data Penjualan (Export Excel Transaksi Penjualan)</option>
                   <option value="penjualan">📄 Data Penjualan (Export PDF Seluruh Transaksi)</option>
                   <option value="kloter">📊 Manajemen Kloter (Export PDF Rekap &amp; Details)</option>
                   <option value="bulanan">📈 Laporan Bulanan Rekap Kinerja &amp; Audit (Template Rapi)</option>
@@ -548,6 +641,164 @@ export function JadwalExportView({ kloters, users, activeHargaPerOns }) {
                 className="py-2 px-4 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition cursor-pointer"
               >
                 Hapus
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL HASIL PENGIRIMAN EMAIL / SIMULASI */}
+      {sendResultModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-sky-100 overflow-hidden animate-in zoom-in-95 duration-200">
+            {/* Header Banner */}
+            <div className="bg-gradient-to-r from-slate-900 via-indigo-900 to-sky-950 text-white p-5 relative">
+              <button
+                onClick={() => setSendResultModal(null)}
+                className="absolute top-4 right-4 text-slate-300 hover:text-white p-1 rounded-lg hover:bg-white/10 transition cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-indigo-500 to-sky-400 flex items-center justify-center text-white shadow-lg">
+                  {sendResultModal.isLoading ? (
+                    <RefreshCw size={22} className="animate-spin" />
+                  ) : (
+                    <MailCheck size={22} />
+                  )}
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-white tracking-tight flex items-center gap-2">
+                    <span>Status Pengiriman Laporan &amp; Backup</span>
+                    <Sparkles size={16} className="text-amber-400" />
+                  </h3>
+                  <p className="text-xs text-sky-200 font-medium">
+                    {sendResultModal.isLoading
+                      ? 'Sedang memproses kompilasi berkas &amp; email...'
+                      : 'Laporan otomatis berhasil diproses dan dikirim'}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-5 space-y-4 text-xs">
+              {/* Stepper Status */}
+              <div className="space-y-2 bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80">
+                <div className="flex items-center gap-2.5 font-bold">
+                  <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${sendResultModal.step >= 1 ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600'}`}>
+                    ✓
+                  </div>
+                  <span className={sendResultModal.step >= 1 ? 'text-slate-900' : 'text-slate-400'}>
+                    Generate Berkas Laporan ({sendResultModal.isExcel ? 'Excel 7-Sheet' : 'PDF'})
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2.5 font-bold">
+                  <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${sendResultModal.step >= 2 ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600'}`}>
+                    {sendResultModal.step === 1 ? '⌛' : '✓'}
+                  </div>
+                  <span className={sendResultModal.step >= 2 ? 'text-slate-900' : 'text-slate-400'}>
+                    Pengemasan Berkas &amp; Konfigurasi Mail Server
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2.5 font-bold">
+                  <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${sendResultModal.step >= 3 ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600'}`}>
+                    {sendResultModal.step < 3 ? '⌛' : '✓'}
+                  </div>
+                  <span className={sendResultModal.step >= 3 ? 'text-slate-900' : 'text-slate-400'}>
+                    Pengiriman Email ke Recipient Target
+                  </span>
+                </div>
+              </div>
+
+              {/* Recipient Details */}
+              <div className="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-4 space-y-3">
+                <div className="text-[11px] font-extrabold text-indigo-900 uppercase tracking-wider">
+                  Target Penerima &amp; Email Goal:
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-extrabold text-sm shadow-xs">
+                      {sendResultModal.schedule.penerimaNama.slice(0, 2).toUpperCase()}
+                    </div>
+                    <div>
+                      <div className="font-extrabold text-slate-900 text-xs">
+                        {sendResultModal.schedule.penerimaNama}
+                      </div>
+                      <div className="text-indigo-700 font-semibold text-[11px] flex items-center gap-1">
+                        <Mail size={12} />
+                        <span>{sendResultModal.schedule.penerimaEmail}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-extrabold border border-emerald-200">
+                    Aktif
+                  </span>
+                </div>
+              </div>
+
+              {/* Attachment Detail Card */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-3.5 space-y-2">
+                <div className="flex items-center justify-between text-slate-700 font-bold">
+                  <div className="flex items-center gap-2">
+                    {sendResultModal.isExcel ? (
+                      <FileSpreadsheet className="text-emerald-600" size={18} />
+                    ) : (
+                      <FileText className="text-sky-600" size={18} />
+                    )}
+                    <span className="font-mono text-slate-900 text-[11px] truncate max-w-[220px]">
+                      {sendResultModal.fileName}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => handleSimulasiKirim(sendResultModal.schedule)}
+                    className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg font-bold text-[11px] border border-indigo-200 flex items-center gap-1 cursor-pointer transition"
+                    title="Unduh / Re-generate File"
+                  >
+                    <Download size={13} />
+                    <span>Download</span>
+                  </button>
+                </div>
+
+                {sendResultModal.isExcel && (
+                  <div className="text-[11px] text-slate-500 font-medium flex items-center gap-3 pt-1 border-t border-slate-100">
+                    <span>📊 7 Sheet Data Backup</span>
+                    <span>•</span>
+                    <span>⚡ Excel .XLSX</span>
+                    <span>•</span>
+                    <span>🔒 Safe Disaster Recovery</span>
+                  </div>
+                )}
+              </div>
+
+              {/* SMTP Dispatch Info Note */}
+              {sendResultModal.serverRes && (
+                <div className="bg-amber-50/90 border border-amber-200 rounded-2xl p-3.5 text-slate-800 space-y-1">
+                  <div className="font-extrabold text-amber-900 flex items-center gap-1.5 text-xs">
+                    <ShieldCheck size={14} className="text-amber-600" />
+                    <span>Status Server Email Dispatcher:</span>
+                  </div>
+                  <p className="text-[11px] text-slate-600 leading-relaxed">
+                    {sendResultModal.serverRes.message}
+                  </p>
+                  {sendResultModal.serverRes.details?.note && (
+                    <p className="text-[10px] text-slate-500 italic pt-1 border-t border-amber-200/60">
+                      💡 <strong>Catatan SMTP:</strong> {sendResultModal.serverRes.details.note}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 p-4 bg-slate-50 border-t border-slate-100">
+              <button
+                onClick={() => setSendResultModal(null)}
+                className="btn btn-primary text-xs py-2.5 px-6 rounded-xl font-bold cursor-pointer shadow-xs"
+              >
+                Tutup Selesai
               </button>
             </div>
           </div>

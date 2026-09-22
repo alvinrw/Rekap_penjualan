@@ -10,6 +10,8 @@ import {
   FileText,
   X,
   Check,
+  Edit2,
+  Trash2,
 } from 'lucide-react';
 import {
   calculateKloterMetrics,
@@ -26,6 +28,8 @@ export function KloterList({
   currentRole,
   onSelectKloter,
   onOpenModal,
+  onDeleteKloter,
+  onEditKloter,
 }) {
   const [filterStatus, setFilterStatus] = useState('semua');
   const [searchQuery, setSearchQuery] = useState('');
@@ -138,37 +142,90 @@ export function KloterList({
                       {kloter.namaKloter}
                     </h3>
                   </div>
-                  <span
-                    className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide flex-shrink-0 ${
-                      kloter.status === 'Aktif'
-                        ? 'bg-sky-100 text-sky-800 border border-sky-200'
-                        : kloter.status === 'Panen'
-                        ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                        : kloter.status === 'Penjualan'
-                        ? 'bg-violet-100 text-violet-800 border border-violet-200'
-                        : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                    }`}
-                  >
-                    {kloter.status}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`px-2.5 py-0.5 rounded-full text-[11px] font-extrabold uppercase tracking-wide ${
+                        metrics.autoStatus === 'Aktif'
+                          ? 'bg-sky-100 text-sky-800 border border-sky-200'
+                          : metrics.autoStatus === 'Panen'
+                          ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                          : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                      }`}
+                    >
+                      {metrics.statusLabel}
+                    </span>
+                    {!isViewer && (
+                      <div className="flex items-center gap-2 relative z-50">
+                        <button
+                          type="button"
+                          className="p-1.5 cursor-pointer text-slate-400 hover:text-sky-600 hover:bg-sky-50 rounded-md transition-colors pointer-events-auto"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (typeof onEditKloter === 'function') {
+                              onEditKloter(kloter);
+                            } else if (typeof onOpenModal === 'function') {
+                              onOpenModal('edit_kloter', kloter.id);
+                            }
+                          }}
+                          title="Edit Kloter"
+                        >
+                          <Edit2 size={16} />
+                        </button>
+                        <button
+                          type="button"
+                          className="p-1.5 cursor-pointer text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors pointer-events-auto"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (typeof onDeleteKloter === 'function') {
+                              onDeleteKloter(kloter.id);
+                            }
+                          }}
+                          title="Hapus Kloter"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
-                <p className="text-xs text-slate-500 mb-4">
-                  {kloter.kandang} &bull; Tgl DOC: {formatDateIndonesian(kloter.tanggalBeliDoc)}
+                <p className="text-xs text-slate-500 mb-3 flex items-center justify-between">
+                  <span>{kloter.kandang ? `${kloter.kandang} • ` : ''}Tgl DOC: {formatDateIndonesian(kloter.tanggalBeliDoc)}</span>
+                  <span className="font-extrabold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200/60">
+                    Usia: {metrics.usiaAyamHari} Hari
+                  </span>
                 </p>
 
                 {/* Metrics Summary Grid with clean spacing */}
-                <div className="grid grid-cols-2 gap-2.5 bg-sky-50/70 p-3.5 rounded-xl border border-sky-100 text-xs mb-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 bg-sky-50/70 p-3 rounded-xl border border-sky-100 text-xs mb-4">
                   <div>
                     <span className="text-slate-500 block text-[10px] uppercase font-bold">DOC Awal</span>
                     <strong className="text-slate-800 text-xs mt-0.5 block">{formatNumber(metrics.docAwal)} ekor</strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block text-[10px] uppercase font-bold">Usia Ayam</span>
+                    <strong className="text-amber-700 text-xs mt-0.5 block font-extrabold">{metrics.usiaAyamHari} Hari</strong>
                   </div>
                   <div>
                     <span className="text-slate-500 block text-[10px] uppercase font-bold">Sisa Ayam</span>
                     <strong className="text-sky-700 text-xs mt-0.5 block">{formatNumber(metrics.sisaAyamHidup)} ekor</strong>
                   </div>
                   <div>
-                    <span className="text-slate-500 block text-[10px] uppercase font-bold">Mortality Rate</span>
+                    <span className="text-slate-500 block text-[10px] uppercase font-bold">Total Panen</span>
+                    <strong className="text-slate-800 text-xs mt-0.5 block">{formatNumber(metrics.totalEkorDipanen)} ekor</strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block text-[10px] uppercase font-bold">Terjual</span>
+                    <strong className="text-emerald-700 text-xs mt-0.5 block">{formatNumber(metrics.totalEkorTerjual)} ekor</strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block text-[10px] uppercase font-bold">Siap Dijual</span>
+                    <strong className="text-indigo-700 text-xs mt-0.5 block">{formatNumber(metrics.stokSiapJual)} ekor</strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block text-[10px] uppercase font-bold">Mortality</span>
                     <strong className={`text-xs mt-0.5 block ${metrics.mortalityRate > 2.5 ? 'text-red-600 font-bold' : 'text-slate-800'}`}>
                       {formatNumber(metrics.mortalityRate, 2)}%
                     </strong>
@@ -184,8 +241,12 @@ export function KloterList({
                 {/* Financial Overview */}
                 <div className="space-y-1.5 text-xs pt-1 border-t border-slate-100">
                   <div className="flex justify-between text-slate-600">
-                    <span>Total Modal (DOC + Biaya):</span>
+                    <span>Modal Total (DOC + Biaya):</span>
                     <span className="font-semibold text-slate-800">{formatRupiah(metrics.totalModal)}</span>
+                  </div>
+                  <div className="flex justify-between text-slate-600">
+                    <span>Total Pengeluaran:</span>
+                    <span className="font-semibold text-slate-800">{formatRupiah(metrics.totalPengeluaran)}</span>
                   </div>
                   <div className="flex justify-between text-slate-600">
                     <span>Total Hasil Penjualan:</span>

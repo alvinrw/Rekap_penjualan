@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { MobileNav } from './components/MobileNav';
 import { Dashboard } from './components/Dashboard';
@@ -10,33 +10,64 @@ import { LaporanAnalytics } from './components/LaporanAnalytics';
 import { UserManagement } from './components/UserManagement';
 import { JadwalExportView } from './components/JadwalExportView';
 import { Modals } from './components/Modals';
+import { ModalKonfirmasiHapus } from './components/modals/ModalKonfirmasiHapus';
 import { LoginPage } from './components/LoginPage';
+import { api } from './services/api';
+
+import { useKloters } from './hooks/useKloters';
+import { useUsers } from './hooks/useUsers';
 
 import {
   initialHargaConfig,
-  initialUsers,
-  initialKloters,
   initialAuditLogs,
 } from './data/initialData';
 
 export default function App() {
-  // Authentication & Application State
-  const [currentUser, setCurrentUser] = useState(initialUsers[0]); // Logged in user
+  // Navigation & UI State
   const [currentTab, setCurrentTab] = useState('dashboard'); // 'dashboard' | 'kloter' | 'penjualan' | 'harga' | 'laporan' | 'user'
   const [selectedKloterId, setSelectedKloterId] = useState(null);
-
-  const [hargaConfig, setHargaConfig] = useState(initialHargaConfig);
-  const [kloters, setKloters] = useState(initialKloters);
-  const [users, setUsers] = useState(initialUsers);
-  const [auditLogs, setAuditLogs] = useState(initialAuditLogs);
-
+  const [editingKloterId, setEditingKloterId] = useState(null);
   const [activeModal, setActiveModal] = useState(null);
+  const [deleteConfirmModal, setDeleteConfirmModal] = useState(null);
 
-  // Deriving current role from logged-in user
-  const currentRole = currentUser?.role || 'viewer';
+  // Config & Logs
+  const [hargaConfig, setHargaConfig] = useState(() => {
+    const saved = localStorage.getItem('pendataan_harga_config');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return initialHargaConfig;
+  });
+
+  const [auditLogs, setAuditLogs] = useState(() => {
+    const saved = localStorage.getItem('pendataan_audit_logs');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      } catch (e) {}
+    }
+    return initialAuditLogs;
+  });
+
+  const [isLoadingData, setIsLoadingData] = useState(false);
+
+  useEffect(() => {
+    if (hargaConfig) {
+      localStorage.setItem('pendataan_harga_config', JSON.stringify(hargaConfig));
+    }
+  }, [hargaConfig]);
+
+  useEffect(() => {
+    if (Array.isArray(auditLogs)) {
+      localStorage.setItem('pendataan_audit_logs', JSON.stringify(auditLogs));
+    }
+  }, [auditLogs]);
 
   // Helper to log audit entries
-  const pushAuditLog = (modul, aksi, deskripsi) => {
+  const pushAuditLog = async (modul, aksi, deskripsi) => {
     const userName = currentUser ? `${currentUser.nama} (${currentUser.labelRole})` : 'System';
 
     const newLog = {
@@ -48,220 +79,204 @@ export default function App() {
       deskripsi,
     };
     setAuditLogs((prev) => [newLog, ...prev]);
+
+    try {
+      await api.createAuditLog({ modul, aksi, deskripsi, user: userName });
+    } catch (err) {
+      // Backend log sync fallback
+    }
   };
 
-  const handleLogin = (user) => {
+  // Custom Hooks for State Management
+  const {
+    users,
+    currentUser,
+    setCurrentUser,
+    loadUsers,
+    handleTambahUser,
+    handleEditUser,
+    handleToggleStatusUser,
+    handleUbahPasswordSelf,
+  } = useUsers(pushAuditLog);
+
+  const {
+    kloters,
+    setKloters,
+    loadKloters,
+    handleTambahKloter: submitTambahKloter,
+    handleEditKloter: submitEditKloter,
+    handleDeleteKloter: submitDeleteKloter,
+    handlePengeluaran: submitPengeluaran,
+    handleDeletePengeluaran,
+    handleKematian: submitKematian,
+    handleDeleteKematian,
+    handlePanen: submitPanen,
+    handleDeletePanen,
+    handlePenjualan: submitPenjualan,
+    handleEditPenjualan,
+    handleDeletePenjualan,
+  } = useKloters(pushAuditLog, currentUser);
+
+  const currentRole = currentUser?.role || 'viewer';
+
+  // Load Initial Data from Backend API
+  const refreshAllData = async () => {
+    try {
+      setIsLoadingData(true);
+      await Promise.allSettled([
+        loadUsers(),
+        loadKloters(),
+        (async () => {
+          try {
+            const backendHarga = await api.getHargaConfig();
+            if (backendHarga?.hargaPerOnsAktif) setHargaConfig(backendHarga);
+          } catch (e) {}
+        })(),
+        (async () => {
+          try {
+            const backendLogs = await api.getAuditLogs();
+            if (Array.isArray(backendLogs)) setAuditLogs(backendLogs);
+          } catch (e) {}
+        })(),
+      ]);
+    } catch (err) {
+      console.warn('Backend sync warning:', err.message);
+    } finally {
+      setIsLoadingData(false);
+    }
+  };
+
+  useEffect(() => {
+    refreshAllData();
+  }, [loadUsers, loadKloters]);
+
+  const handleLogin = async (user) => {
     setCurrentUser(user);
+    try {
+      await api.login(user.username, user.password);
+    } catch (err) {}
     pushAuditLog('Autentikasi', 'Login Pengguna', `User ${user.nama} berhasil masuk ke sistem dengan role ${user.labelRole}.`);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     if (currentUser) {
+      try {
+        await api.logout(currentUser.id);
+      } catch (err) {}
       pushAuditLog('Autentikasi', 'Logout Pengguna', `User ${currentUser.nama} keluar dari sistem.`);
     }
     setCurrentUser(null);
   };
 
-  // Handlers for input transactions
-  const handleTambahKloter = (formData) => {
-    const newKloterId = `KLT-2026-${(kloters.length + 1).toString().padStart(2, '0')}`;
-    const newKloter = {
-      id: newKloterId,
-      namaKloter: formData.namaKloter,
-      kandang: formData.kandang,
-      tanggalBeliDoc: formData.tanggalBeliDoc,
-      docAwal: formData.docAwal,
-      hargaDocPerEkor: formData.hargaDocPerEkor,
-      status: 'Aktif',
-      catatanAwal: formData.catatanAwal,
-      pengeluaranList: [],
-      kematianList: [],
-      panenList: [],
-      penjualanList: [],
-    };
-
-    setKloters((prev) => [newKloter, ...prev]);
-    pushAuditLog(
-      'Manajemen Kloter',
-      'Buat Kloter Baru',
-      `Membuat ${formData.namaKloter} dengan DOC awal ${formData.docAwal} ekor @ Rp ${formData.hargaDocPerEkor}.`
-    );
+  // Wrapped modal submit handlers to close modal on submit
+  const handleTambahKloter = async (formData) => {
+    await submitTambahKloter(formData);
     setActiveModal(null);
   };
 
-  const handlePengeluaran = (formData) => {
-    setKloters((prev) =>
-      prev.map((k) => {
-        if (k.id === formData.kloterId) {
-          const newExp = {
-            id: `EXP-${Date.now().toString().slice(-4)}`,
-            tanggal: formData.tanggal,
-            kategori: formData.kategori,
-            keterangan: formData.keterangan,
-            jumlahKg: formData.jumlahKg,
-            jumlahRp: formData.jumlahRp,
-            dicatatOleh: currentUser ? currentUser.nama : 'Admin',
-          };
-          return {
-            ...k,
-            pengeluaranList: [newExp, ...(k.pengeluaranList || [])],
-          };
-        }
-        return k;
-      })
-    );
-
-    pushAuditLog(
-      'Pengeluaran',
-      'Input Pengeluaran Baru',
-      `Catat biaya ${formData.kategori} (${formData.keterangan}) sebesar Rp ${formData.jumlahRp} pada kloter ${formData.kloterId}.`
-    );
+  const handleEditKloter = async (formData) => {
+    await submitEditKloter(formData);
     setActiveModal(null);
   };
 
-  const handleKematian = (formData) => {
-    setKloters((prev) =>
-      prev.map((k) => {
-        if (k.id === formData.kloterId) {
-          const newDeath = {
-            id: `DTH-${Date.now().toString().slice(-4)}`,
-            tanggal: formData.tanggal,
-            jumlahEkor: formData.jumlahEkor,
-            penyebab: formData.penyebab,
-            dicatatOleh: currentUser ? currentUser.nama : 'Admin',
-          };
-          return {
-            ...k,
-            kematianList: [newDeath, ...(k.kematianList || [])],
-          };
-        }
-        return k;
-      })
-    );
+  const handleRequestDeleteKloter = (kloterId) => {
+    const target = kloters.find((k) => k.id === kloterId);
+    const kloterName = target ? `${target.namaKloter} (${target.kandang || 'Kandang'})` : kloterId;
+    setDeleteConfirmModal({
+      title: 'Hapus Kloter',
+      message: `PERINGATAN: Menghapus kloter '${kloterName}' akan menghapus SEMUA data transaksi di dalamnya. Lanjutkan?`,
+      submessage: 'Tindakan ini tidak dapat dibatalkan dan akan memperbarui kalkulasi otomatis.',
+      confirmText: 'Ya, Hapus Kloter',
+      onConfirm: async () => {
+        await submitDeleteKloter(kloterId, selectedKloterId, setSelectedKloterId);
+      },
+    });
+  };
 
-    pushAuditLog(
-      'Kematian Ayam',
-      'Input Catatan Kematian',
-      `Catat kematian ${formData.jumlahEkor} ekor di kloter ${formData.kloterId}. Indikasi: ${formData.penyebab}.`
-    );
+  const handleRequestDeletePengeluaran = (kloterId, itemId) => {
+    setDeleteConfirmModal({
+      title: 'Hapus Catatan Pengeluaran',
+      message: 'Apakah Anda yakin ingin menghapus catatan pengeluaran ini?',
+      submessage: 'Tindakan ini tidak dapat dibatalkan dan akan memperbarui total modal kloter.',
+      confirmText: 'Ya, Hapus Pengeluaran',
+      onConfirm: async () => {
+        await handleDeletePengeluaran(kloterId, itemId);
+      },
+    });
+  };
+
+  const handleRequestDeleteKematian = (kloterId, itemId) => {
+    setDeleteConfirmModal({
+      title: 'Hapus Catatan Kematian',
+      message: 'Apakah Anda yakin ingin menghapus catatan kematian ini?',
+      submessage: 'Tindakan ini tidak dapat dibatalkan dan akan menyesuaikan jumlah sisa ayam.',
+      confirmText: 'Ya, Hapus Catatan',
+      onConfirm: async () => {
+        await handleDeleteKematian(kloterId, itemId);
+      },
+    });
+  };
+
+  const handleRequestDeletePanen = (kloterId, itemId) => {
+    setDeleteConfirmModal({
+      title: 'Hapus Catatan Panen',
+      message: 'Apakah Anda yakin ingin menghapus catatan panen ini?',
+      submessage: 'Tindakan ini tidak dapat dibatalkan dan akan memperbarui akumulasi panen.',
+      confirmText: 'Ya, Hapus Catatan',
+      onConfirm: async () => {
+        await handleDeletePanen(kloterId, itemId);
+      },
+    });
+  };
+
+  const handleRequestDeletePenjualan = (kloterId, saleId, saleObj) => {
+    const buyerInfo = saleObj ? ` dari '${saleObj.pembeli}'` : '';
+    setDeleteConfirmModal({
+      title: 'Hapus Transaksi Penjualan',
+      message: `Apakah Anda yakin ingin menghapus data transaksi penjualan${buyerInfo}?`,
+      submessage: 'Tindakan ini tidak dapat dibatalkan dan akan memperbarui sisa ayam serta kalkulasi.',
+      confirmText: 'Ya, Hapus Penjualan',
+      onConfirm: async () => {
+        await handleDeletePenjualan(kloterId, saleId);
+      },
+    });
+  };
+
+  const handlePengeluaran = async (formData) => {
+    await submitPengeluaran(formData);
     setActiveModal(null);
   };
 
-  const handlePanen = (formData) => {
-    setKloters((prev) =>
-      prev.map((k) => {
-        if (k.id === formData.kloterId) {
-          const newPanen = {
-            id: `HV-${Date.now().toString().slice(-4)}`,
-            tanggal: formData.tanggal,
-            jumlahEkor: formData.jumlahEkor,
-            catatan: formData.catatan,
-            dicatatOleh: currentUser ? currentUser.nama : 'Admin',
-          };
-          return {
-            ...k,
-            panenList: [newPanen, ...(k.panenList || [])],
-          };
-        }
-        return k;
-      })
-    );
-
-    pushAuditLog(
-      'Panen',
-      'Input Panen Bertahap',
-      `Mencatat panen ${formData.jumlahEkor} ekor di kloter ${formData.kloterId}.`
-    );
+  const handleKematian = async (formData) => {
+    await submitKematian(formData);
     setActiveModal(null);
   };
 
-  const handlePenjualan = (formData) => {
-    setKloters((prev) =>
-      prev.map((k) => {
-        if (k.id === formData.kloterId) {
-          const newSales = {
-            id: `SL-${Date.now().toString().slice(-4)}`,
-            tanggal: formData.tanggal,
-            pembeli: formData.pembeli,
-            beratGram: formData.beratGram,
-            hargaPerOnsSnapshot: formData.hargaPerOnsSnapshot,
-            totalHarga: formData.totalHarga,
-            metodePembayaran: formData.metodePembayaran,
-            catatanNota: formData.catatanNota,
-            dicatatOleh: currentUser ? currentUser.nama : 'Admin',
-          };
-          return {
-            ...k,
-            penjualanList: [newSales, ...(k.penjualanList || [])],
-          };
-        }
-        return k;
-      })
-    );
-
-    const ons = formData.beratGram / 100;
-    pushAuditLog(
-      'Penjualan',
-      'Input Penjualan Baru',
-      `Mencatat penjualan kloter ${formData.kloterId} ke ${formData.pembeli} sebesar ${formData.beratGram} gram (${ons} ons) snapshot Rp ${formData.hargaPerOnsSnapshot}/ons. Total: Rp ${formData.totalHarga}.`
-    );
+  const handlePanen = async (formData) => {
+    await submitPanen(formData);
     setActiveModal(null);
   };
 
-  const handleEditPenjualan = (kloterId, saleId, updatedData) => {
-    setKloters((prev) =>
-      prev.map((k) => {
-        if (k.id === kloterId) {
-          return {
-            ...k,
-            penjualanList: (k.penjualanList || []).map((s) =>
-              s.id === saleId ? { ...s, ...updatedData } : s
-            ),
-          };
-        }
-        return k;
-      })
-    );
-    pushAuditLog(
-      'Penjualan',
-      'Edit Transaksi Penjualan',
-      `Memperbarui transaksi penjualan ${saleId} di kloter ${kloterId} pembeli ${updatedData.pembeli}.`
-    );
+  const handlePenjualan = async (formData) => {
+    const saved = await submitPenjualan(formData);
+    if (saved !== false) setActiveModal(null);
   };
 
-  const handleDeletePenjualan = (kloterId, saleId) => {
-    setKloters((prev) =>
-      prev.map((k) => {
-        if (k.id === kloterId) {
-          return {
-            ...k,
-            penjualanList: (k.penjualanList || []).filter((s) => s.id !== saleId),
-          };
-        }
-        return k;
-      })
-    );
-    pushAuditLog(
-      'Penjualan',
-      'Hapus Transaksi Penjualan',
-      `Menghapus transaksi penjualan ${saleId} dari kloter ${kloterId}.`
-    );
-  };
-
-  const handleUpdateHarga = (hargaBaru, catatan) => {
+  const handleUpdateHarga = async (hargaBaru, catatan) => {
+    const diubahOleh = currentUser ? `${currentUser.nama} (${currentUser.labelRole})` : 'Admin';
     const newLog = {
       id: `H-${Date.now().toString().slice(-3)}`,
-      hargaPerOns: hargaBaru,
+      hargaPerOns: Number(hargaBaru),
       berlakuMulai: new Date().toISOString().split('T')[0],
-      diubahOleh: currentUser ? `${currentUser.nama} (${currentUser.labelRole})` : 'Admin',
+      diubahOleh,
       catatan,
     };
 
     setHargaConfig((prev) => ({
-      hargaPerOnsAktif: hargaBaru,
+      hargaPerOnsAktif: Number(hargaBaru),
       berlakuMulai: new Date().toISOString().split('T')[0],
-      terakhirDiubahOleh: newLog.diubahOleh,
-      riwayatHarga: [newLog, ...prev.riwayatHarga],
+      terakhirDiubahOleh: diubahOleh,
+      riwayatHarga: [newLog, ...(prev.riwayatHarga || [])],
     }));
 
     pushAuditLog(
@@ -269,9 +284,15 @@ export default function App() {
       'Ubah Harga Per Ons',
       `Memperbarui harga acuan per ons menjadi Rp ${hargaBaru}. Catatan: ${catatan}.`
     );
+
+    try {
+      await api.updateHarga(hargaBaru, catatan, diubahOleh);
+    } catch (err) {
+      console.warn('Harga backend sync warning:', err.message);
+    }
   };
 
-  const handleUpdateKloterStatus = (kloterId, statusBaru) => {
+  const handleUpdateKloterStatus = async (kloterId, statusBaru) => {
     setKloters((prev) =>
       prev.map((k) => (k.id === kloterId ? { ...k, status: statusBaru } : k))
     );
@@ -280,146 +301,125 @@ export default function App() {
       'Ubah Status Kloter',
       `Mengubah status kloter ${kloterId} menjadi '${statusBaru}'.`
     );
-  };
 
-  // User Management Handlers
-  const handleTambahUser = (newUser) => {
-    const userObj = {
-      id: `USR-${(users.length + 1).toString().padStart(3, '0')}`,
-      ...newUser,
-      status: 'Aktif',
-      lastLogin: 'Belum pernah',
-    };
-    setUsers((prev) => [...prev, userObj]);
-    pushAuditLog(
-      'Manajemen User',
-      'Tambah User Baru',
-      `Menambah user baru ${newUser.nama} (${newUser.labelRole || newUser.role}).`
-    );
-  };
-
-  const handleEditUser = (userId, updatedData) => {
-    const targetUser = users.find((u) => u.id === userId);
-    if (currentRole === 'admin' && targetUser?.role === 'super_admin') {
-      alert('Admin tidak memiliki wewenang untuk mengubah akun Super Admin!');
-      return;
+    try {
+      await api.updateKloterStatus(kloterId, statusBaru);
+    } catch (err) {
+      console.warn('Update kloter status backend sync warning:', err.message);
     }
-
-    setUsers((prev) =>
-      prev.map((u) => {
-        if (u.id === userId) {
-          let labelRole = u.labelRole;
-          if (updatedData.role === 'super_admin') labelRole = 'Super Admin';
-          else if (updatedData.role === 'admin') labelRole = 'Admin Operasional';
-          else if (updatedData.role === 'viewer') labelRole = 'Viewer / Pengawas';
-
-          return {
-            ...u,
-            ...updatedData,
-            labelRole: updatedData.labelRole || labelRole,
-          };
-        }
-        return u;
-      })
-    );
-
-    pushAuditLog(
-      'Manajemen User',
-      'Edit Data User',
-      `Memperbarui data user ${targetUser?.nama || userId} (Username: ${updatedData.username || targetUser?.username}).`
-    );
   };
 
-  const handleDeleteUser = (userId) => {
-    const targetUser = users.find((u) => u.id === userId);
-    if (currentRole === 'admin' && targetUser?.role === 'super_admin') {
-      alert('Admin tidak memiliki wewenang untuk menghapus akun Super Admin!');
-      return;
-    }
+  const selectedKloter = kloters.find((k) => k.id === (editingKloterId || selectedKloterId));
 
-    setUsers((prev) => prev.filter((u) => u.id !== userId));
-    pushAuditLog(
-      'Manajemen User',
-      'Hapus User',
-      `Menghapus akun user ${targetUser?.nama || userId}.`
-    );
-  };
-
-  // If not logged in, render Login Page!
+  // If user is not logged in, render Login screen
   if (!currentUser) {
-    return (
-      <LoginPage
-        users={users}
-        activePrice={hargaConfig.hargaPerOnsAktif}
-        onLogin={handleLogin}
-      />
-    );
+    return <LoginPage onLogin={handleLogin} users={users} activePrice={hargaConfig.hargaPerOnsAktif} />;
   }
 
-  // Find selected kloter object
-  const currentKloterObj = kloters.find((k) => k.id === selectedKloterId);
-
   return (
-    <div className="app-container min-h-screen bg-sky-50/50 flex flex-col font-sans overflow-x-hidden">
-      <div className="main-content-wrapper flex flex-1">
-        {/* Desktop Sidebar Navigation */}
+    <div className="app-shell flex h-screen bg-slate-100 overflow-hidden font-sans">
+      {/* Desktop Sidebar */}
+      <div className="hidden md:flex flex-shrink-0">
         <Sidebar
           currentTab={currentTab}
-          setCurrentTab={(tab) => {
-            setSelectedKloterId(null);
-            setCurrentTab(tab);
-          }}
+          setCurrentTab={setCurrentTab}
+          setSelectedKloterId={setSelectedKloterId}
           currentRole={currentRole}
           currentUser={currentUser}
           onLogout={handleLogout}
+          onOpenModal={(modal) => setActiveModal(modal)}
         />
+      </div>
 
-        {/* Main View Area */}
-        <main className="page-container flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full min-w-0 pb-20 md:pb-8">
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        {/* Mobile Navigation Bar */}
+        <div className="md:hidden flex-shrink-0">
+          <MobileNav
+            currentTab={currentTab}
+            setCurrentTab={setCurrentTab}
+            setSelectedKloterId={setSelectedKloterId}
+            currentRole={currentRole}
+            currentUser={currentUser}
+            onLogout={handleLogout}
+            onOpenModal={(modal) => setActiveModal(modal)}
+          />
+        </div>
+
+        {/* Dynamic Page Routing View */}
+        <main className="app-main flex-1 overflow-y-auto p-4 sm:p-6 md:p-8">
           {currentTab === 'dashboard' && (
             <Dashboard
               kloters={kloters}
               activeHargaPerOns={hargaConfig.hargaPerOnsAktif}
               currentRole={currentRole}
-              onSelectKloter={(id) => {
-                if (id) {
-                  setSelectedKloterId(id);
-                  setCurrentTab('kloter');
-                } else {
-                  setCurrentTab('kloter');
-                }
+              onNavigate={(tab, kloterId) => {
+                setCurrentTab(tab);
+                if (kloterId) setSelectedKloterId(kloterId);
+              }}
+              onOpenModal={(modal, kloterId) => {
+                if (kloterId) setSelectedKloterId(kloterId);
+                setActiveModal(modal);
               }}
             />
           )}
 
-          {currentTab === 'kloter' &&
-            (!selectedKloterId || !currentKloterObj ? (
+          {currentTab === 'kloter' && (
+            selectedKloterId ? (
+              <KloterDetail
+                kloter={kloters.find((k) => k.id === selectedKloterId) || kloters[0]}
+                activeHargaPerOns={hargaConfig.hargaPerOnsAktif}
+                currentRole={currentRole}
+                onBack={() => setSelectedKloterId(null)}
+                onOpenModal={(modal, id) => {
+                  setSelectedKloterId(id);
+                  setActiveModal(modal);
+                }}
+                onUpdateStatus={handleUpdateKloterStatus}
+                onDeletePengeluaran={handleRequestDeletePengeluaran}
+                onDeleteKematian={handleRequestDeleteKematian}
+                onDeletePanen={handleRequestDeletePanen}
+                onDeletePenjualan={handleRequestDeletePenjualan}
+                onEditKloter={(k) => {
+                  setEditingKloterId(k.id);
+                  setActiveModal('edit_kloter');
+                }}
+                onDeleteKloter={handleRequestDeleteKloter}
+              />
+            ) : (
               <KloterList
                 kloters={kloters}
                 activeHargaPerOns={hargaConfig.hargaPerOnsAktif}
                 currentRole={currentRole}
                 onSelectKloter={(id) => setSelectedKloterId(id)}
-                onOpenModal={(modalName) => setActiveModal(modalName)}
+                onOpenModal={(modal, id) => {
+                  if (modal === 'edit_kloter' && id) {
+                    setEditingKloterId(id);
+                  } else if (id) {
+                    setSelectedKloterId(id);
+                  }
+                  setActiveModal(modal);
+                }}
+                onEditKloter={(kloter) => {
+                  setEditingKloterId(kloter.id);
+                  setActiveModal('edit_kloter');
+                }}
+                onDeleteKloter={handleRequestDeleteKloter}
               />
-            ) : (
-              <KloterDetail
-                kloter={currentKloterObj}
-                activeHargaPerOns={hargaConfig.hargaPerOnsAktif}
-                currentRole={currentRole}
-                onBack={() => setSelectedKloterId(null)}
-                onOpenModal={(modalName) => setActiveModal(modalName)}
-                onUpdateStatus={handleUpdateKloterStatus}
-              />
-            ))}
+            )
+          )}
 
           {currentTab === 'penjualan' && (
             <PenjualanView
               kloters={kloters}
               activeHargaPerOns={hargaConfig.hargaPerOnsAktif}
               currentRole={currentRole}
-              onOpenModal={(modalName) => setActiveModal(modalName)}
+              onOpenModal={(modal, id) => {
+                if (id) setSelectedKloterId(id);
+                setActiveModal(modal);
+              }}
               onEditPenjualan={handleEditPenjualan}
-              onDeletePenjualan={handleDeletePenjualan}
+              onDeletePenjualan={handleRequestDeletePenjualan}
             />
           )}
 
@@ -435,54 +435,63 @@ export default function App() {
             <LaporanAnalytics
               kloters={kloters}
               activeHargaPerOns={hargaConfig.hargaPerOnsAktif}
+              users={users}
+              auditLogs={auditLogs}
             />
           )}
 
-          {currentTab === 'jadwal_export' && (currentRole === 'super_admin' || currentRole === 'admin') && (
+          {currentTab === 'jadwal_export' && (
             <JadwalExportView
               kloters={kloters}
               users={users}
+              auditLogs={[]}
               activeHargaPerOns={hargaConfig.hargaPerOnsAktif}
             />
           )}
 
-          {currentTab === 'user' && (currentRole === 'super_admin' || currentRole === 'admin') && (
+          {currentTab === 'user' && (
             <UserManagement
               users={users}
               currentUser={currentUser}
-              currentRole={currentRole}
               onTambahUser={handleTambahUser}
               onEditUser={handleEditUser}
-              onDeleteUser={handleDeleteUser}
+              onToggleStatus={handleToggleStatusUser}
+              onUbahPassword={handleUbahPasswordSelf}
             />
           )}
         </main>
       </div>
 
-      {/* Touch-Friendly Mobile Bottom Navigation */}
-      <MobileNav
-        currentTab={currentTab}
-        setCurrentTab={(tab) => {
-          setSelectedKloterId(null);
-          setCurrentTab(tab);
-        }}
-        currentRole={currentRole}
-      />
-
-      {/* Modal Dialog Manager */}
+      {/* Centralized Modal Manager Component */}
       <Modals
         activeModal={activeModal}
-        selectedKloterId={selectedKloterId}
+        selectedKloterId={editingKloterId || selectedKloterId}
         kloters={kloters}
         activeHargaPerOns={hargaConfig.hargaPerOnsAktif}
         currentRole={currentRole}
-        onClose={() => setActiveModal(null)}
+        onClose={() => {
+          setActiveModal(null);
+          setEditingKloterId(null);
+        }}
         onSubmitTambahKloter={handleTambahKloter}
         onSubmitPengeluaran={handlePengeluaran}
         onSubmitKematian={handleKematian}
         onSubmitPanen={handlePanen}
         onSubmitPenjualan={handlePenjualan}
+        onSubmitEditKloter={handleEditKloter}
       />
+
+      {/* Delete Confirmation Modal UI */}
+      {deleteConfirmModal && (
+        <ModalKonfirmasiHapus
+          title={deleteConfirmModal.title}
+          message={deleteConfirmModal.message}
+          submessage={deleteConfirmModal.submessage}
+          confirmText={deleteConfirmModal.confirmText}
+          onClose={() => setDeleteConfirmModal(null)}
+          onConfirm={deleteConfirmModal.onConfirm}
+        />
+      )}
     </div>
   );
 }

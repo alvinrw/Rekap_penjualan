@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, ChevronDown, Check, X, Layers, Filter } from 'lucide-react';
+import { Search, ChevronDown, Check, X, Layers } from 'lucide-react';
 
 export function KloterSelect({
   kloters = [],
@@ -8,6 +8,7 @@ export function KloterSelect({
   includeSemua = true,
   placeholder = 'Pilih atau Cari Kloter...',
   className = '',
+  alignRight = true,
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -60,13 +61,13 @@ export function KloterSelect({
           e.stopPropagation();
           setIsOpen(!isOpen);
         }}
-        className="w-full px-3.5 py-2.5 bg-sky-50/90 hover:bg-sky-100 text-slate-800 rounded-xl border border-sky-200 text-xs font-bold transition flex items-center justify-between gap-2 cursor-pointer shadow-2xs"
+        className="w-full px-3.5 py-2 bg-sky-50/90 hover:bg-sky-100 text-slate-800 rounded-xl border border-sky-200 text-xs font-bold transition flex items-center justify-between gap-2 cursor-pointer shadow-2xs"
       >
         <div className="flex items-center gap-2 truncate">
           <Layers size={15} className="text-sky-600 shrink-0" />
           <span className="truncate">
             {selectedKloterId === 'semua'
-              ? `Semua Kloter (${kloters.length} Kloter)`
+              ? `Semua Kloter (${kloters.length})`
               : selectedKloter
               ? `${selectedKloter.namaKloter} (${selectedKloter.status})`
               : placeholder}
@@ -78,7 +79,9 @@ export function KloterSelect({
       {/* Floating Searchable Panel */}
       {isOpen && (
         <div
-          className="absolute left-0 mt-1.5 w-full min-w-[280px] sm:min-w-[320px] bg-white rounded-2xl shadow-2xl border border-slate-200 p-3 z-50 text-xs space-y-2.5 animate-in fade-in zoom-in-95 duration-150"
+          className={`absolute mt-1.5 w-72 sm:w-80 max-w-[calc(100vw-2rem)] bg-white rounded-2xl shadow-xl border border-sky-100 p-3 z-50 text-xs space-y-2.5 animate-in fade-in zoom-in-95 duration-150 ${
+            alignRight ? 'right-0 left-auto' : 'left-0 right-auto'
+          }`}
           onClick={(e) => e.stopPropagation()}
         >
           {/* Search Field */}
@@ -88,14 +91,15 @@ export function KloterSelect({
               type="text"
               autoFocus
               className="w-full pl-9 pr-8 py-2 bg-slate-50 rounded-xl border border-slate-200 focus:outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 font-medium text-xs"
-              placeholder="Cari dari 1.000+ kloter..."
+              placeholder="Cari nama kloter, id, kandang..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
             {searchQuery && (
               <button
+                type="button"
                 onClick={() => setSearchQuery('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
               >
                 <X size={14} />
               </button>
@@ -109,7 +113,7 @@ export function KloterSelect({
                 key={st}
                 type="button"
                 onClick={() => setStatusFilter(st)}
-                className={`px-2.5 py-1 rounded-lg font-extrabold capitalize shrink-0 transition ${
+                className={`px-2.5 py-1 rounded-lg font-extrabold capitalize shrink-0 transition cursor-pointer ${
                   statusFilter === st
                     ? 'bg-sky-600 text-white shadow-2xs'
                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -120,13 +124,7 @@ export function KloterSelect({
             ))}
           </div>
 
-          {/* Results Info */}
-          <div className="flex items-center justify-between px-1 text-[10px] text-slate-400 font-bold border-b pb-1">
-            <span>HASIL PENCARIAN ({filteredKloters.length})</span>
-            <span>Maks tinggi panel 260px</span>
-          </div>
-
-          {/* Scrollable List Container (Fixed Height so it never overflows screen!) */}
+          {/* Scrollable List Container */}
           <div className="max-h-60 overflow-y-auto space-y-1 pr-1 scrollbar-thin">
             {includeSemua && statusFilter === 'semua' && !searchQuery && (
               <button

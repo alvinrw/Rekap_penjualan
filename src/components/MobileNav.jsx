@@ -8,8 +8,9 @@ import {
   Users,
 } from 'lucide-react';
 
-export function MobileNav({ currentTab, setCurrentTab, currentRole }) {
-  const canAccessUser = currentRole === 'super_admin' || currentRole === 'admin';
+export function MobileNav({ currentTab, setCurrentTab, currentRole, currentUser }) {
+  const activeRole = currentRole || currentUser?.role || 'viewer';
+  const canAccessUser = activeRole === 'super_admin' || activeRole === 'admin';
 
   return (
     <nav className="mobile-bottom-bar">
@@ -44,6 +45,14 @@ export function MobileNav({ currentTab, setCurrentTab, currentRole }) {
         >
           <Tag size={20} />
           <span>Harga</span>
+        </button>
+
+        <button
+          className={`mobile-nav-btn ${currentTab === 'laporan' ? 'active' : ''}`}
+          onClick={() => setCurrentTab('laporan')}
+        >
+          <BarChart3 size={20} />
+          <span>Laporan</span>
         </button>
 
         {canAccessUser && (

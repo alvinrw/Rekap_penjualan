@@ -1,7 +1,7 @@
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { formatRupiah, calculateKloterMetrics } from './calculations';
+import { formatRupiah, formatNumber, calculateKloterMetrics, angkaKeTerbilang } from './calculations';
 
 /**
  * Format date to YYYY-MM-DD
@@ -11,13 +11,43 @@ const getTodayDateStr = () => {
   return d.toISOString().split('T')[0];
 };
 
+const formatWorksheet = (worksheet, widths) => {
+  worksheet['!cols'] = widths.map((wch) => ({ wch }));
+  worksheet['!autofilter'] = {
+    ref: worksheet['!ref'],
+  };
+};
+
+const applyNumberFormats = (worksheet, formats) => {
+  const range = XLSX.utils.decode_range(worksheet['!ref']);
+  const columns = {};
+  for (let col = range.s.c; col <= range.e.c; col += 1) {
+    const headerCell = worksheet[XLSX.utils.encode_cell({ r: range.s.r, c: col })];
+    if (headerCell?.v) columns[headerCell.v] = col;
+  }
+  Object.entries(formats).forEach(([header, format]) => {
+    const col = columns[header];
+    if (col === undefined) return;
+    for (let row = range.s.r + 1; row <= range.e.r; row += 1) {
+      const cell = worksheet[XLSX.utils.encode_cell({ r: row, c: col })];
+      if (cell) cell.z = format;
+    }
+  });
+};
+
+
 /**
  * EXPORT MANAJEMEN KLOTER (EXCEL)
  * @param {Array} kloters - Array of kloter objects
  * @param {string} targetId - 'all' or specific kloter ID
  * @param {number} activeHargaPerOns - snapshot active price
  */
-export function exportKloterToExcel(kloters, targetId = 'all', activeHargaPerOns = 7500) {
+export function exportKloterToExcel(
+  kloters,
+  targetId = 'all',
+  activeHargaPerOns = 7500,
+  additionalData = {}
+) {
   const wb = XLSX.utils.book_new();
   const selectedKloters = targetId === 'all'
     ? kloters
@@ -27,6 +57,8 @@ export function exportKloterToExcel(kloters, targetId = 'all', activeHargaPerOns
     alert('Tidak ada data kloter untuk di-export!');
     return;
   }
+
+  const { users = [], auditLogs = [] } = additionalData;
 
   // SHEET 1: REKAPITULASI RINGKASAN KLOTER
   const rekapRows = selectedKloters.map((k, index) => {
@@ -43,9 +75,11 @@ export function exportKloterToExcel(kloters, targetId = 'all', activeHargaPerOns
       'Total Modal DOC (Rp)': calc.modalDoc,
       'Total Kematian (Ekor)': calc.totalKematian,
       'Ayam Hidup (Ekor)': calc.sisaAyamHidup,
-      'Mortilitas (%)': `${calc.mortalityRate.toFixed(2)}%`,
+      'Mortality (%)': calc.mortalityRate / 100,
       'Total Pakan (Kg)': calc.totalPakanKg,
       'Ayam Terpanen (Ekor)': calc.totalEkorDipanen,
+      'Ayam Terjual (Ekor)': calc.totalEkorTerjual,
+      'Stok Siap Dijual (Ekor)': calc.stokSiapJual,
       'Total Biaya Pengeluaran (Rp)': calc.totalPengeluaran,
       'Total Pendapatan Penjualan (Rp)': calc.totalPemasukan,
       'Estimasi / Real Laba Rugi (Rp)': calc.netProfit,
@@ -53,6 +87,22 @@ export function exportKloterToExcel(kloters, targetId = 'all', activeHargaPerOns
   });
 
   const wsRekap = XLSX.utils.json_to_sheet(rekapRows);
+  formatWorksheet(wsRekap, [6, 16, 30, 20, 14, 16, 16, 20, 20, 20, 20, 16, 16, 22, 22, 22, 25, 26, 26]);
+  applyNumberFormats(wsRekap, {
+    'DOC Awal (Ekor)': '#,##0',
+    'Harga DOC/Ekor (Rp)': '"Rp" #,##0',
+    'Total Modal DOC (Rp)': '"Rp" #,##0',
+    'Total Kematian (Ekor)': '#,##0',
+    'Ayam Hidup (Ekor)': '#,##0',
+    'Mortality (%)': '0.00%',
+    'Total Pakan (Kg)': '#,##0.00',
+    'Ayam Terpanen (Ekor)': '#,##0',
+    'Ayam Terjual (Ekor)': '#,##0',
+    'Stok Siap Dijual (Ekor)': '#,##0',
+    'Total Biaya Pengeluaran (Rp)': '"Rp" #,##0',
+    'Total Pendapatan Penjualan (Rp)': '"Rp" #,##0',
+    'Estimasi / Real Laba Rugi (Rp)': '"Rp" #,##0',
+  });
   XLSX.utils.book_append_sheet(wb, wsRekap, 'Rekapitulasi Kloter');
 
   // SHEET 2: DETAIL TRANSAKSI PENGELUARAN
@@ -72,10 +122,27 @@ export function exportKloterToExcel(kloters, targetId = 'all', activeHargaPerOns
       });
     });
   });
-  if (pengeluaranRows.length > 0) {
-    const wsExp = XLSX.utils.json_to_sheet(pengeluaranRows);
-    XLSX.utils.book_append_sheet(wb, wsExp, 'Rincian Pengeluaran');
-  }
+
+  const wsExp = XLSX.utils.json_to_sheet(
+    pengeluaranRows.length > 0
+      ? pengeluaranRows
+      : [
+          {
+            'ID Kloter': '',
+            'Nama Kloter': '',
+            'ID Transaksi': '',
+            'Tanggal': '',
+            'Kategori': '',
+            'Keterangan Rincian': '',
+            'Jumlah Pakan (Kg)': 0,
+            'Biaya (Rp)': 0,
+            'Dicatat Oleh': '',
+          },
+        ]
+  );
+  formatWorksheet(wsExp, [16, 28, 18, 14, 18, 32, 20, 18, 18]);
+  applyNumberFormats(wsExp, { 'Jumlah Pakan (Kg)': '#,##0.00', 'Biaya (Rp)': '"Rp" #,##0' });
+  XLSX.utils.book_append_sheet(wb, wsExp, 'Rincian Pengeluaran');
 
   // SHEET 3: DETAIL KEMATIAN
   const kematianRows = [];
@@ -92,10 +159,25 @@ export function exportKloterToExcel(kloters, targetId = 'all', activeHargaPerOns
       });
     });
   });
-  if (kematianRows.length > 0) {
-    const wsDth = XLSX.utils.json_to_sheet(kematianRows);
-    XLSX.utils.book_append_sheet(wb, wsDth, 'Catatan Kematian');
-  }
+
+  const wsDth = XLSX.utils.json_to_sheet(
+    kematianRows.length > 0
+      ? kematianRows
+      : [
+          {
+            'ID Kloter': '',
+            'Nama Kloter': '',
+            'ID Catatan': '',
+            'Tanggal': '',
+            'Jumlah Ekor Mati': 0,
+            'Penyebab / Indikasi': '',
+            'Dicatat Oleh': '',
+          },
+        ]
+  );
+  formatWorksheet(wsDth, [16, 28, 18, 14, 20, 28, 18]);
+  applyNumberFormats(wsDth, { 'Jumlah Ekor Mati': '#,##0' });
+  XLSX.utils.book_append_sheet(wb, wsDth, 'Catatan Kematian');
 
   // SHEET 4: DETAIL PANEN
   const panenRows = [];
@@ -112,10 +194,25 @@ export function exportKloterToExcel(kloters, targetId = 'all', activeHargaPerOns
       });
     });
   });
-  if (panenRows.length > 0) {
-    const wsPanen = XLSX.utils.json_to_sheet(panenRows);
-    XLSX.utils.book_append_sheet(wb, wsPanen, 'Catatan Panen');
-  }
+
+  const wsPanen = XLSX.utils.json_to_sheet(
+    panenRows.length > 0
+      ? panenRows
+      : [
+          {
+            'ID Kloter': '',
+            'Nama Kloter': '',
+            'ID Panen': '',
+            'Tanggal Panen': '',
+            'Jumlah Ekor Panen': 0,
+            'Catatan Operasional': '',
+            'Dicatat Oleh': '',
+          },
+        ]
+  );
+  formatWorksheet(wsPanen, [16, 28, 16, 16, 20, 32, 18]);
+  applyNumberFormats(wsPanen, { 'Jumlah Ekor Panen': '#,##0' });
+  XLSX.utils.book_append_sheet(wb, wsPanen, 'Catatan Panen');
 
   // SHEET 5: DETAIL PENJUALAN
   const penjualanRows = [];
@@ -125,11 +222,11 @@ export function exportKloterToExcel(kloters, targetId = 'all', activeHargaPerOns
         'ID Kloter': k.id,
         'Nama Kloter': k.namaKloter,
         'ID Penjualan': sl.id,
+        'No Struk / Nota': sl.noStruk || sl.id,
         'Tanggal': sl.tanggal,
         'Pembeli': sl.pembeli,
+        'Ekor Terjual': sl.jumlahEkor || 1,
         'Berat (Gram)': sl.beratGram,
-        'Berat (Kg)': (sl.beratGram / 1000).toFixed(2),
-        'Berat (Ons)': (sl.beratGram / 100).toFixed(1),
         'Harga / Ons (Rp)': sl.hargaPerOnsSnapshot,
         'Total Pendapatan (Rp)': sl.totalHarga,
         'Metode Pembayaran': sl.metodePembayaran,
@@ -138,14 +235,75 @@ export function exportKloterToExcel(kloters, targetId = 'all', activeHargaPerOns
       });
     });
   });
-  if (penjualanRows.length > 0) {
-    const wsSl = XLSX.utils.json_to_sheet(penjualanRows);
-    XLSX.utils.book_append_sheet(wb, wsSl, 'Detail Penjualan');
+
+  const wsSl = XLSX.utils.json_to_sheet(
+    penjualanRows.length > 0
+      ? penjualanRows
+      : [
+          {
+            'ID Kloter': '',
+            'Nama Kloter': '',
+            'ID Penjualan': '',
+            'No Struk / Nota': '',
+            'Tanggal': '',
+            'Pembeli': '',
+            'Ekor Terjual': 0,
+            'Berat (Gram)': 0,
+            'Berat (Kg)': 0,
+            'Berat (Ons)': 0,
+            'Harga / Ons (Rp)': 0,
+            'Total Pendapatan (Rp)': 0,
+            'Metode Pembayaran': '',
+            'Catatan Nota': '',
+            'Dicatat Oleh': '',
+          },
+        ]
+  );
+  formatWorksheet(wsSl, [16, 28, 18, 18, 14, 24, 14, 16, 14, 14, 20, 22, 26, 32, 18]);
+  applyNumberFormats(wsSl, {
+    'Ekor Terjual': '#,##0',
+    'Berat (Gram)': '#,##0',
+    'Berat (Kg)': '#,##0.00',
+    'Berat (Ons)': '#,##0.0',
+    'Harga / Ons (Rp)': '"Rp" #,##0',
+    'Total Pendapatan (Rp)': '"Rp" #,##0',
+  });
+  XLSX.utils.book_append_sheet(wb, wsSl, 'Detail Penjualan');
+
+  // SHEET 6: MASTER USER & AKUN (BACKUP RECOVERY)
+  if (Array.isArray(users) && users.length > 0) {
+    const userRows = users.map((u) => ({
+      'ID User': u.id,
+      'Nama Lengkap': u.nama,
+      'Username / Email': u.username,
+      'Role Level': u.role,
+      'Label Role': u.labelRole || u.role,
+      'Status Akun': u.status,
+      'Terakhir Login': u.lastLogin || '-',
+    }));
+    const wsUsers = XLSX.utils.json_to_sheet(userRows);
+    formatWorksheet(wsUsers, [16, 24, 30, 16, 20, 14, 22]);
+    XLSX.utils.book_append_sheet(wb, wsUsers, 'Master User Akun');
+  }
+
+  // SHEET 7: LOG AUDIT AKTIVITAS SISTEM (BACKUP AUDIT)
+  if (Array.isArray(auditLogs) && auditLogs.length > 0) {
+    const logRows = auditLogs.map((l) => ({
+      'ID Log': l.id,
+      'Waktu Timestamp': l.timestamp,
+      'User Pelaksana': l.user,
+      'Modul': l.modul,
+      'Aksi': l.aksi,
+      'Deskripsi Detail': l.deskripsi,
+    }));
+    const wsLogs = XLSX.utils.json_to_sheet(logRows);
+    formatWorksheet(wsLogs, [16, 22, 28, 20, 24, 45]);
+    XLSX.utils.book_append_sheet(wb, wsLogs, 'Log Audit Sistem');
   }
 
   const fileName = targetId === 'all'
-    ? `Laporan_Lengkap_Semua_Kloter_${getTodayDateStr()}.xlsx`
-    : `Laporan_Kloter_${targetId}_${getTodayDateStr()}.xlsx`;
+    ? `BACKUP_MASTER_SEMUA_KLOTER_${getTodayDateStr()}.xlsx`
+    : `BACKUP_KLOTER_${targetId}_${getTodayDateStr()}.xlsx`;
 
   XLSX.writeFile(wb, fileName);
 }
@@ -167,9 +325,6 @@ export function exportKloterToPDF(kloters, targetId = 'all', activeHargaPerOns =
   }
 
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-
-  // Header Title
-  doc.setFontSize(16);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(15, 23, 42); // slate-900
   doc.text('LAPORAN MANAJEMEN KLOTER AYAM BROILER', 14, 15);
@@ -638,6 +793,629 @@ export function exportLaporanBulananToPDF(kloters, activeHargaPerOns = 7500) {
   doc.text('( Super Admin / Owner )', 135, signY + 20);
 
   const fileName = `Laporan_Bulanan_Bulanan_${todayStr.slice(0, 7)}.pdf`;
+  doc.save(fileName);
+}
+
+/**
+ * EXPORT STRUK PENJUALAN (PDF)
+ * Generates a thermal-style receipt for a single sales transaction
+ * @param {Object} penjualan - The sales transaction object
+ * @param {Object} kloter - The kloter object
+ */
+export function exportStrukPDF(penjualan, kloter) {
+  // Use a smaller thermal-receipt format: e.g., 80mm width.
+  // Standard 80mm thermal paper width is about 80x200 mm.
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [80, 200] });
+  let currentY = 10;
+  
+  // Center alignment helper
+  const centerText = (text, y, size, font = 'normal') => {
+    doc.setFontSize(size);
+    doc.setFont('helvetica', font);
+    const textWidth = doc.getStringUnitWidth(text) * doc.internal.getFontSize() / doc.internal.scaleFactor;
+    const textOffset = (80 - textWidth) / 2;
+    doc.text(text, textOffset, y);
+  };
+  
+  const rightText = (text, y, size, font = 'normal') => {
+    doc.setFontSize(size);
+    doc.setFont('helvetica', font);
+    const textWidth = doc.getStringUnitWidth(text) * doc.internal.getFontSize() / doc.internal.scaleFactor;
+    doc.text(text, 75 - textWidth, y);
+  };
+  
+  const leftText = (text, y, size, font = 'normal') => {
+    doc.setFontSize(size);
+    doc.setFont('helvetica', font);
+    doc.text(text, 5, y);
+  };
+
+  const drawLine = (y) => {
+    doc.setLineDashPattern([1, 1], 0);
+    doc.line(5, y, 75, y);
+    doc.setLineDashPattern([], 0);
+  };
+
+  // HEADER
+  centerText('STRUK PENJUALAN', currentY, 14, 'bold');
+  currentY += 5;
+  centerText('Bukti Pembelian Ayam', currentY, 9, 'normal');
+  currentY += 4;
+  drawLine(currentY);
+  currentY += 5;
+
+  // INFO
+  leftText('No. Struk', currentY, 9);
+  rightText(penjualan.noStruk || penjualan.id.slice(-6), currentY, 9);
+  currentY += 5;
+  
+  // We don't have exact time in the mock, so we use date and current time for "dicetak" later.
+  leftText('Tanggal', currentY, 9);
+  const dateObj = new Date(penjualan.tanggal);
+  const dateStr = dateObj.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+  rightText(dateStr, currentY, 9);
+  currentY += 5;
+
+  leftText('Petugas', currentY, 9);
+  rightText(penjualan.dicatatOleh || 'Admin', currentY, 9);
+  currentY += 4;
+  drawLine(currentY);
+  currentY += 5;
+
+  // KEPADA (Left: KEPADA, Right: Buyer Name & Category)
+  leftText('KEPADA', currentY, 8, 'bold');
+  rightText(penjualan.pembeli, currentY, 10, 'bold');
+  currentY += 4.5;
+  rightText(penjualan.kategoriPembeli || 'Pembeli Toko', currentY, 8, 'normal');
+  currentY += 4;
+  drawLine(currentY);
+  currentY += 5;
+
+  // RINCIAN
+  leftText('RINCIAN', currentY, 8, 'bold');
+  currentY += 5;
+  leftText('Ayam Broiler', currentY, 11, 'bold');
+  currentY += 5;
+
+  leftText('Jumlah', currentY, 9);
+  rightText(`${penjualan.jumlahEkor || 0} ekor`, currentY, 9, 'bold');
+  currentY += 5;
+
+  leftText('Berat timbangan', currentY, 9);
+  rightText(`${penjualan.beratGram} gram`, currentY, 9);
+  currentY += 5;
+
+  const kg = (penjualan.beratGram / 1000).toFixed(2);
+  const ons = (penjualan.beratGram / 100).toFixed(1);
+  leftText('Setara', currentY, 9);
+  rightText(`${kg} Kg / ${ons} ons`, currentY, 9);
+  currentY += 5;
+
+  leftText('Harga per ons', currentY, 9);
+  rightText(formatRupiah(penjualan.hargaPerOnsSnapshot), currentY, 9);
+  currentY += 4;
+  
+  doc.setLineWidth(0.5);
+  doc.line(5, currentY, 75, currentY);
+  currentY += 6;
+
+  // TOTAL
+  leftText('TOTAL', currentY, 12, 'bold');
+  rightText(formatRupiah(penjualan.totalHarga), currentY, 14, 'bold');
+  currentY += 6;
+
+  // Terbilang Text (Matching contoh-struk-penjualan.pdf)
+  const terbilangStr = `Terbilang: ${angkaKeTerbilang(penjualan.totalHarga)}`;
+  doc.setFontSize(7.5);
+  doc.setFont('helvetica', 'italic');
+  doc.setTextColor(51, 65, 85);
+  const lines = doc.splitTextToSize(terbilangStr, 70);
+  doc.text(lines, 5, currentY);
+  currentY += lines.length * 4 + 2;
+
+  doc.setLineWidth(0.5);
+  doc.line(5, currentY, 75, currentY);
+  currentY += 6;
+
+  // FOOTER
+  centerText('Terima kasih', currentY, 11, 'bold');
+  currentY += 5;
+  centerText('Simpan struk ini sebagai bukti pembelian.', currentY, 8);
+  currentY += 6;
+  
+  const printTime = new Date().toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' });
+  centerText(`Dicetak ${printTime}`, currentY, 7);
+
+  // Save the document
+  const fileName = `Struk_${penjualan.noStruk || penjualan.id}_${penjualan.pembeli.replace(/\s+/g, '_')}.pdf`;
+  doc.save(fileName);
+}
+
+
+
+
+/**
+ * EXPORT LAPORAN PER KLOTER (PDF) WITH COVER PAGE (Design_cover.pdf Template Reference)
+ * 4-page elegant report: Cover · Executive Summary · Analytics + Top Buyers · Transaction Detail
+ */
+export function exportKloterReportWithCoverPDF(kloter, bulanFilter = 'all', tahunFilter = 'all', activeHargaPerOns = 7500) {
+  if (!kloter) return;
+
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const calc = calculateKloterMetrics(kloter, activeHargaPerOns);
+
+  const monthNames = [
+    '', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
+  ];
+
+  const bulanLabel = bulanFilter !== 'all' ? monthNames[Number(bulanFilter)] || 'Semua Bulan' : 'Semua Bulan';
+  const tahunLabel = tahunFilter !== 'all'
+    ? String(tahunFilter)
+    : new Date(kloter.tanggalBeliDoc || Date.now()).getFullYear().toString();
+  const todayFormatted = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+  const todayShort = new Date().toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+  // ─── Filtered transaction lists ──────────────────────────────────
+  const matchesFilter = (dateStr) => {
+    if (!dateStr) return true;
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return true;
+    if (tahunFilter !== 'all' && d.getFullYear().toString() !== tahunFilter.toString()) return false;
+    if (bulanFilter !== 'all' && (d.getMonth() + 1).toString() !== bulanFilter.toString()) return false;
+    return true;
+  };
+  const filteredPenjualan = (kloter.penjualanList || []).filter((s) => matchesFilter(s.tanggal));
+  const filteredPengeluaran = (kloter.pengeluaranList || []).filter((e) => matchesFilter(e.tanggal));
+
+  // ─── Buyer analytics ────────────────────────────────────────────
+  const buyerMap = {};
+  filteredPenjualan.forEach((s) => {
+    const k = s.pembeli || 'Unknown';
+    if (!buyerMap[k]) buyerMap[k] = { nama: k, totalNilai: 0, totalEkor: 0, freq: 0 };
+    buyerMap[k].totalNilai += Number(s.totalHarga) || 0;
+    buyerMap[k].totalEkor += Number(s.jumlahEkor) || 0;
+    buyerMap[k].freq += 1;
+  });
+  const buyerArr = Object.values(buyerMap);
+  const top5ByValue = [...buyerArr].sort((a, b) => b.totalNilai - a.totalNilai).slice(0, 5);
+  const top3ByFreq = [...buyerArr].sort((a, b) => b.freq - a.freq).slice(0, 3);
+
+  // ─── Estimasi hari habis stok ────────────────────────────────────
+  const penjualanDenganEkor = (kloter.penjualanList || []).filter((s) => Number(s.jumlahEkor) > 0);
+  const rataEkorPerHari = penjualanDenganEkor.length > 0 ? calc.totalEkorTerjual / penjualanDenganEkor.length : 0;
+  const estimasiHari = rataEkorPerHari > 0 ? Math.ceil(Math.max(0, calc.stokSiapJual) / rataEkorPerHari) : null;
+
+  // ─── Inline helpers ──────────────────────────────────────────────
+
+  /** Section header: bold navy title + thin underline */
+  const sectionHeader = (title, y) => {
+    doc.setFontSize(8.5);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(26, 46, 74);
+    doc.text(title.toUpperCase(), 14, y);
+    doc.setDrawColor(26, 46, 74);
+    doc.setLineWidth(0.35);
+    doc.line(14, y + 1.5, 196, y + 1.5);
+  };
+
+  /** KPI card: label (small), value (large), optional subtext */
+  const kpiBox = (label, value, sub, x, y, w, h) => {
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.3);
+    doc.roundedRect(x, y, w, h, 2, 2, 'FD');
+    doc.setFontSize(6.5);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 116, 139);
+    doc.text(label, x + w / 2, y + 5.5, { align: 'center' });
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(26, 46, 74);
+    doc.text(String(value), x + w / 2, y + 12, { align: 'center' });
+    if (sub) {
+      doc.setFontSize(6);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(148, 163, 184);
+      doc.text(String(sub), x + w / 2, y + 17, { align: 'center' });
+    }
+  };
+
+  /** Navy header banner */
+  const pageHeader = (title, subtitle) => {
+    doc.setFillColor(26, 46, 74);
+    doc.rect(0, 0, 210, 22, 'F');
+    doc.setFontSize(13);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(255, 255, 255);
+    doc.text(title, 14, 10);
+    doc.setFontSize(7.5);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(148, 175, 210);
+    doc.text(subtitle, 14, 17);
+  };
+
+  /** Generate donut chart as canvas PNG data URL */
+  const makeDonutPng = (segments, size = 280) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    const total = segments.reduce((s, d) => s + d.value, 0);
+    const cx = size / 2;
+    const cy = size / 2;
+    const outerR = size * 0.42;
+    const innerR = size * 0.23;
+    if (total === 0) {
+      ctx.beginPath();
+      ctx.arc(cx, cy, (outerR + innerR) / 2, 0, Math.PI * 2);
+      ctx.strokeStyle = '#E2E8F0';
+      ctx.lineWidth = outerR - innerR;
+      ctx.stroke();
+    } else {
+      let angle = -Math.PI / 2;
+      segments.forEach((seg) => {
+        if (seg.value <= 0) return;
+        const sweep = (seg.value / total) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.moveTo(cx + innerR * Math.cos(angle), cy + innerR * Math.sin(angle));
+        ctx.arc(cx, cy, outerR, angle, angle + sweep);
+        ctx.arc(cx, cy, innerR, angle + sweep, angle, true);
+        ctx.closePath();
+        ctx.fillStyle = seg.color;
+        ctx.fill();
+        angle += sweep;
+      });
+    }
+    // White center hole
+    ctx.beginPath();
+    ctx.arc(cx, cy, innerR, 0, Math.PI * 2);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fill();
+    return canvas.toDataURL('image/png');
+  };
+
+  // =========================================================
+  // PAGE 1: COVER - clean editorial layout, no baked-in background image
+  // =========================================================
+  doc.setFillColor(247, 250, 252);
+  doc.rect(0, 0, 210, 297, 'F');
+
+  // Oversized accent block and diagonal rhythm create a strong cover silhouette.
+  doc.setFillColor(14, 165, 233);
+  doc.rect(0, 0, 13, 297, 'F');
+  doc.setFillColor(224, 242, 254);
+  doc.triangle(128, 0, 210, 0, 210, 170, 'F');
+  doc.setDrawColor(56, 189, 248);
+  doc.setLineWidth(0.6);
+  doc.line(142, 0, 210, 68);
+  doc.line(154, 0, 210, 56);
+  doc.line(166, 0, 210, 44);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(3, 105, 161);
+  doc.text('BROILER OPERATIONS', 24, 28);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.setTextColor(100, 116, 139);
+  doc.text('PERFORMANCE REPORT / INTERNAL USE', 24, 35);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(29);
+  doc.setTextColor(15, 23, 42);
+  doc.text('LAPORAN', 24, 82);
+  doc.setTextColor(2, 132, 199);
+  doc.text('KLOTER', 24, 112);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.setTextColor(71, 85, 105);
+  doc.text('Ringkasan populasi, performa, transaksi, dan profitabilitas', 24, 126);
+  doc.text('peternakan ayam broiler berbasis data operasional.', 24, 133);
+
+  const coverName = doc.splitTextToSize(String(kloter.namaKloter || 'Tanpa Nama Kloter'), 112);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(15);
+  doc.setTextColor(15, 23, 42);
+  doc.text(coverName, 24, 164, { lineHeightFactor: 1.2 });
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(100, 116, 139);
+  doc.text(`${kloter.id}  /  ${kloter.kandang || 'Kandang tidak diisi'}`, 24, 164 + coverName.length * 7);
+
+  const dateDisplay = bulanFilter !== 'all' ? `${bulanLabel} ${tahunLabel}` : todayFormatted;
+  const coverMeta = [
+    ['PERIODE', dateDisplay],
+    ['DOC AWAL', `${formatNumber(calc.docAwal)} ekor`],
+    ['STATUS', calc.autoStatus],
+  ];
+  const metaY = 226;
+  coverMeta.forEach(([label, value], index) => {
+    const x = 24 + index * 57;
+    doc.setDrawColor(186, 230, 253);
+    doc.setLineWidth(0.3);
+    doc.line(x, metaY, x + 48, metaY);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(6.5);
+    doc.setTextColor(3, 105, 161);
+    doc.text(label, x, metaY + 8);
+    doc.setFontSize(9);
+    doc.setTextColor(15, 23, 42);
+    doc.text(String(value), x, metaY + 16);
+  });
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.setTextColor(100, 116, 139);
+  doc.text(`DICETAK ${todayShort}`, 24, 277);
+  doc.setTextColor(3, 105, 161);
+  doc.text('PENDATAAN AYAM', 196, 277, { align: 'right' });
+
+
+  // =========================================================
+  // PAGE 2: EXECUTIVE SUMMARY
+  // =========================================================
+  doc.addPage();
+  pageHeader(
+    `LAPORAN KLOTER: ${kloter.namaKloter.toUpperCase()}`,
+    `${kloter.id}  \u00b7  Kandang: ${kloter.kandang || '-'}  \u00b7  Periode: ${bulanLabel} ${tahunLabel}`,
+  );
+
+  let y2 = 30;
+
+  // Ringkasan Populasi — donut chart + legend
+  sectionHeader('Ringkasan Populasi', y2);
+  y2 += 6;
+
+  const donutSegments = [
+    { value: calc.totalEkorTerjual, color: '#1A2E4A' },
+    { value: Math.max(0, calc.stokSiapJual), color: '#4A6FA5' },
+    { value: Math.max(0, calc.sisaAyamHidup), color: '#94A3B8' },
+    { value: calc.totalKematian, color: '#CBD5E1' },
+  ];
+  const donutPng = makeDonutPng(donutSegments);
+  const CHART_SIZE = 55;
+  doc.addImage(donutPng, 'PNG', 14, y2, CHART_SIZE, CHART_SIZE);
+
+  // Center label
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(26, 46, 74);
+  doc.text(formatNumber(calc.docAwal), 14 + CHART_SIZE / 2, y2 + CHART_SIZE / 2 - 1, { align: 'center' });
+  doc.setFontSize(6);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(100, 116, 139);
+  doc.text('ekor total', 14 + CHART_SIZE / 2, y2 + CHART_SIZE / 2 + 4, { align: 'center' });
+
+  // Legend
+  const legendItems = [
+    { label: 'Terjual', value: calc.totalEkorTerjual, color: [26, 46, 74] },
+    { label: 'Stok Panen', value: Math.max(0, calc.stokSiapJual), color: [74, 111, 165] },
+    { label: 'Sisa Hidup', value: Math.max(0, calc.sisaAyamHidup), color: [148, 163, 184] },
+    { label: 'Kematian', value: calc.totalKematian, color: [203, 213, 225] },
+  ];
+  legendItems.forEach((item, i) => {
+    const ly = y2 + 3 + i * 12;
+    doc.setFillColor(...item.color);
+    doc.rect(75, ly, 4.5, 4.5, 'F');
+    doc.setFontSize(7.5);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(71, 85, 105);
+    doc.text(item.label, 83, ly + 3.5);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(26, 46, 74);
+    doc.text(`${formatNumber(item.value)} ekor`, 136, ly + 3.5, { align: 'right' });
+    const pct = calc.docAwal > 0 ? ((item.value / calc.docAwal) * 100).toFixed(1) : '0.0';
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(148, 163, 184);
+    doc.text(`${pct}%`, 151, ly + 3.5);
+  });
+
+  // 2 KPI cards on the right
+  kpiBox('DOC Awal', `${formatNumber(calc.docAwal)} ekor`, 'Populasi masuk', 157, y2, 39, 26);
+  kpiBox('Usia Ayam', `${calc.usiaAyamHari} Hari`, 'Sejak masuk DOC', 157, y2 + 28, 39, 26);
+
+  y2 += CHART_SIZE + 10;
+
+  // Kinerja Finansial
+  sectionHeader('Kinerja Finansial', y2);
+  y2 += 6;
+  const FW = 58;
+  kpiBox('Total Modal & Pengeluaran', formatRupiah(calc.totalModal), null, 14, y2, FW, 26);
+  kpiBox('Total Omset Penjualan', formatRupiah(calc.totalPemasukan), null, 14 + FW + 2, y2, FW, 26);
+  kpiBox('Net Profit / Rugi', formatRupiah(calc.netProfit), `ROI: ${formatNumber(calc.roi, 2)}%`, 14 + (FW + 2) * 2, y2, FW, 26);
+  y2 += 30;
+
+  // Indikator Teknis
+  sectionHeader('Indikator Teknis', y2);
+  y2 += 6;
+  const IW = 43;
+  kpiBox('FCR Pakan', calc.fcr > 0 ? formatNumber(calc.fcr, 2) : '-', 'Feed Conversion Ratio', 14, y2, IW, 28);
+  kpiBox('Mortality Rate', `${formatNumber(calc.mortalityRate, 2)}%`, `${calc.totalKematian} ekor mati`, 14 + IW + 2, y2, IW, 28);
+  kpiBox(
+    'Est. Habis Terjual',
+    estimasiHari !== null ? `${estimasiHari} Hari` : '-',
+    rataEkorPerHari > 0 ? `~${Math.round(rataEkorPerHari)} ekor/hari` : 'Belum ada data',
+    14 + (IW + 2) * 2, y2, IW, 28,
+  );
+  kpiBox('Status Kloter', calc.autoStatus, calc.statusLabel, 14 + (IW + 2) * 3, y2, IW, 28);
+  y2 += 32;
+
+  // Ringkasan Transaksi
+  sectionHeader('Ringkasan Transaksi Periode', y2);
+  y2 += 6;
+  const TW = 44;
+  const totalPenjualanEkor = filteredPenjualan.reduce((s, x) => s + (Number(x.jumlahEkor) || 0), 0);
+  const totalPengeluaranRp = filteredPengeluaran.reduce((s, x) => s + (Number(x.jumlahRp) || 0), 0);
+  kpiBox('Penjualan', `${filteredPenjualan.length} Nota`, `${formatNumber(totalPenjualanEkor)} ekor terjual`, 14, y2, TW, 28);
+  kpiBox('Pengeluaran', `${filteredPengeluaran.length} Item`, formatRupiah(totalPengeluaranRp), 14 + TW + 2, y2, TW, 28);
+  kpiBox('Panen', `${(kloter.panenList || []).length} Sesi`, `${formatNumber(calc.totalEkorDipanen)} ekor dipanen`, 14 + (TW + 2) * 2, y2, TW, 28);
+  kpiBox('Tanggal Masuk DOC', kloter.tanggalBeliDoc || '-', `Awal: ${formatNumber(calc.docAwal)} ekor`, 14 + (TW + 2) * 3, y2, TW, 28);
+
+  // =========================================================
+  // PAGE 3: ANALITIK PENJUALAN
+  // =========================================================
+  doc.addPage();
+  pageHeader(
+    'ANALITIK PENJUALAN',
+    `${kloter.namaKloter.toUpperCase()}  \u00b7  ${kloter.id}  \u00b7  Periode: ${bulanLabel} ${tahunLabel}`,
+  );
+
+  let y3 = 30;
+
+  // Top 5 by value
+  sectionHeader('Top 5 Pembeli \u2014 Nilai Terbesar', y3);
+  y3 += 4;
+  autoTable(doc, {
+    startY: y3,
+    head: [['No', 'Nama Pembeli', 'Total Ekor', 'Total Nilai (Rp)', 'Frekuensi']],
+    body: top5ByValue.length > 0
+      ? top5ByValue.map((b, i) => [
+          i + 1, b.nama,
+          `${formatNumber(b.totalEkor)} ekor`,
+          formatRupiah(b.totalNilai),
+          `${b.freq}\u00d7 transaksi`,
+        ])
+      : [['-', 'Belum ada data penjualan pada periode ini.', '-', '-', '-']],
+    theme: 'plain',
+    headStyles: { fillColor: [26, 46, 74], textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold', cellPadding: 3 },
+    bodyStyles: { fontSize: 8, cellPadding: 3, textColor: [51, 65, 85] },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    columnStyles: {
+      0: { cellWidth: 12 },
+      1: { cellWidth: 65, fontStyle: 'bold' },
+      2: { cellWidth: 32 },
+      3: { cellWidth: 50, fontStyle: 'bold' },
+      4: { cellWidth: 33 },
+    },
+    margin: { left: 14, right: 14 },
+  });
+  y3 = doc.lastAutoTable.finalY + 12;
+
+  // Top 3 by frequency
+  sectionHeader('Top 3 Pembeli \u2014 Paling Sering', y3);
+  y3 += 4;
+  autoTable(doc, {
+    startY: y3,
+    head: [['No', 'Nama Pembeli', 'Frekuensi Beli', 'Total Nilai (Rp)', 'Total Ekor']],
+    body: top3ByFreq.length > 0
+      ? top3ByFreq.map((b, i) => [
+          i + 1, b.nama,
+          `${b.freq}\u00d7 transaksi`,
+          formatRupiah(b.totalNilai),
+          `${formatNumber(b.totalEkor)} ekor`,
+        ])
+      : [['-', 'Belum ada data penjualan pada periode ini.', '-', '-', '-']],
+    theme: 'plain',
+    headStyles: { fillColor: [74, 111, 165], textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold', cellPadding: 3 },
+    bodyStyles: { fontSize: 8, cellPadding: 3, textColor: [51, 65, 85] },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    columnStyles: {
+      0: { cellWidth: 12 },
+      1: { cellWidth: 65, fontStyle: 'bold' },
+      2: { cellWidth: 38 },
+      3: { cellWidth: 50, fontStyle: 'bold' },
+      4: { cellWidth: 27 },
+    },
+    margin: { left: 14, right: 14 },
+  });
+
+  // =========================================================
+  // PAGE 4: RINCIAN TRANSAKSI
+  // =========================================================
+  doc.addPage();
+  pageHeader(
+    'RINCIAN TRANSAKSI',
+    `${kloter.namaKloter.toUpperCase()}  \u00b7  ${kloter.id}  \u00b7  Periode: ${bulanLabel} ${tahunLabel}`,
+  );
+
+  let y4 = 30;
+
+  // Penjualan
+  sectionHeader(`Rincian Penjualan (${filteredPenjualan.length} transaksi)`, y4);
+  y4 += 4;
+  autoTable(doc, {
+    startY: y4,
+    head: [['No', 'Tanggal', 'Pembeli', 'Ekor', 'Berat', 'Harga/Ons', 'Total']],
+    body: filteredPenjualan.length > 0
+      ? filteredPenjualan.map((s, i) => [
+          i + 1, s.tanggal, s.pembeli,
+          `${formatNumber(s.jumlahEkor || 0)} ekor`,
+          `${((s.beratGram || 0) / 1000).toFixed(2)} kg`,
+          formatRupiah(s.hargaPerOnsSnapshot),
+          formatRupiah(s.totalHarga),
+        ])
+      : [['-', '-', 'Belum ada transaksi penjualan di periode ini.', '-', '-', '-', '-']],
+    theme: 'plain',
+    headStyles: { fillColor: [26, 46, 74], textColor: [255, 255, 255], fontSize: 7.5, fontStyle: 'bold', cellPadding: 2.5 },
+    bodyStyles: { fontSize: 7.5, cellPadding: 2.5, textColor: [51, 65, 85] },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    columnStyles: {
+      0: { cellWidth: 10 },
+      1: { cellWidth: 22 },
+      2: { cellWidth: 52, fontStyle: 'bold' },
+      3: { cellWidth: 20 },
+      4: { cellWidth: 22 },
+      5: { cellWidth: 30 },
+      6: { cellWidth: 30, fontStyle: 'bold' },
+    },
+    margin: { left: 14, right: 14 },
+  });
+  y4 = doc.lastAutoTable.finalY + 10;
+
+  if (y4 > 220) {
+    doc.addPage();
+    y4 = 20;
+  }
+
+  // Pengeluaran
+  sectionHeader(`Rincian Pengeluaran (${filteredPengeluaran.length} item)`, y4);
+  y4 += 4;
+  autoTable(doc, {
+    startY: y4,
+    head: [['No', 'Tanggal', 'Kategori', 'Keterangan', 'Volume', 'Biaya (Rp)']],
+    body: filteredPengeluaran.length > 0
+      ? filteredPengeluaran.map((e, i) => [
+          i + 1, e.tanggal, e.kategori, e.keterangan || '-',
+          e.jumlahKg ? `${formatNumber(e.jumlahKg)} kg` : '-',
+          formatRupiah(e.jumlahRp),
+        ])
+      : [['-', '-', 'Belum ada pengeluaran di periode ini.', '-', '-', '-']],
+    theme: 'plain',
+    headStyles: { fillColor: [74, 111, 165], textColor: [255, 255, 255], fontSize: 7.5, fontStyle: 'bold', cellPadding: 2.5 },
+    bodyStyles: { fontSize: 7.5, cellPadding: 2.5, textColor: [51, 65, 85] },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    columnStyles: {
+      0: { cellWidth: 10 },
+      1: { cellWidth: 22 },
+      2: { cellWidth: 28 },
+      3: { cellWidth: 70 },
+      4: { cellWidth: 20 },
+      5: { cellWidth: 36, fontStyle: 'bold' },
+    },
+    margin: { left: 14, right: 14 },
+  });
+
+  // ── Footer di semua halaman (kecuali cover halaman 1) ─────────────
+  const totalPages = doc.getNumberOfPages();
+  for (let pg = 2; pg <= totalPages; pg++) {
+    doc.setPage(pg);
+    const pageH = 297;
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.25);
+    doc.line(14, pageH - 11, 196, pageH - 11);
+    doc.setFontSize(6.5);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(148, 163, 184);
+    doc.text(
+      `Sistem Pendataan Ayam Broiler  \u00b7  ${kloter.namaKloter}  \u00b7  Dicetak: ${todayShort}`,
+      14,
+      pageH - 6,
+    );
+    doc.text(`${pg - 1} / ${totalPages - 1}`, 196, pageH - 6, { align: 'right' });
+  }
+
+  const fileName = `Laporan_${kloter.namaKloter.replace(/\s+/g, '_')}_${bulanLabel}_${tahunLabel}.pdf`;
   doc.save(fileName);
 }
 

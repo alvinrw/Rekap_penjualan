@@ -22,10 +22,13 @@ import {
   formatNumber,
   gramToOns,
   formatDateIndonesian,
+  angkaKeTerbilang,
 } from '../utils/calculations';
 import { exportPenjualanToExcel, exportPenjualanToPDF } from '../utils/exportUtils';
+import { cetakStrukPenjualanPDF } from '../utils/receiptPdfGenerator';
 import { KloterSelect } from './KloterSelect';
 import { Pagination } from './Pagination';
+
 
 export function PenjualanView({
   kloters,
@@ -226,8 +229,10 @@ export function PenjualanView({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {paginatedSales.map((sale) => {
+              {paginatedSales.map((sale, index) => {
                 const ons = gramToOns(sale.beratGram);
+                const isNearBottom = index >= paginatedSales.length - 2 && paginatedSales.length > 2;
+
                 return (
                   <tr key={sale.id} className="hover:bg-slate-50/80 transition">
                     <td className="py-3.5 px-4 font-semibold text-slate-700 whitespace-nowrap">
@@ -274,10 +279,25 @@ export function PenjualanView({
 
                         {activeActionSaleId === sale.id && (
                           <div
-                            className="absolute right-0 mt-1 w-44 bg-white rounded-xl shadow-xl border border-slate-200/80 p-1.5 z-50 text-xs font-medium text-slate-700 space-y-1 animate-in fade-in zoom-in-95 duration-150 text-left"
+                            className={`absolute right-0 w-48 bg-white rounded-xl shadow-2xl border border-slate-200 p-1.5 z-50 text-xs font-medium text-slate-700 space-y-1 animate-in fade-in zoom-in-95 duration-150 text-left ${
+                              isNearBottom ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
+                            }`}
                             onClick={(e) => e.stopPropagation()}
                           >
-                            {/* Cetak Struk */}
+                            {/* Download PDF Struk */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setActiveActionSaleId(null);
+                                cetakStrukPenjualanPDF(sale);
+                              }}
+                              className="w-full flex items-center gap-2 px-2.5 py-1.5 hover:bg-emerald-50 text-emerald-800 rounded-lg transition text-left cursor-pointer font-semibold"
+                            >
+                              <FileText size={14} className="text-emerald-600" />
+                              <span>Download PDF Struk</span>
+                            </button>
+
+                            {/* Lihat / Cetak Struk */}
                             <button
                               type="button"
                               onClick={() => {
@@ -287,7 +307,7 @@ export function PenjualanView({
                               className="w-full flex items-center gap-2 px-2.5 py-1.5 hover:bg-sky-50 text-sky-800 rounded-lg transition text-left cursor-pointer font-semibold"
                             >
                               <Printer size={14} className="text-sky-600" />
-                              <span>Cetak Struk</span>
+                              <span>Lihat / Cetak Struk</span>
                             </button>
 
                             {!isViewer && (
@@ -310,12 +330,8 @@ export function PenjualanView({
                                   type="button"
                                   onClick={() => {
                                     setActiveActionSaleId(null);
-                                    if (
-                                      window.confirm(
-                                        `Apakah Anda yakin ingin menghapus data penjualan dari '${sale.pembeli}' sebesar ${formatRupiah(sale.totalHarga)}?`
-                                      )
-                                    ) {
-                                      onDeletePenjualan(sale.kloterId, sale.id);
+                                    if (typeof onDeletePenjualan === 'function') {
+                                      onDeletePenjualan(sale.kloterId, sale.id, sale);
                                     }
                                   }}
                                   className="w-full flex items-center gap-2 px-2.5 py-1.5 hover:bg-red-50 text-red-700 rounded-lg transition text-left cursor-pointer font-semibold"
@@ -381,6 +397,10 @@ function ModalCetakStruk({ item, onClose }) {
     window.print();
   };
 
+  const handleDownloadPdf = () => {
+    cetakStrukPenjualanPDF(item);
+  };
+
   return (
     <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 border border-slate-200" onClick={(e) => e.stopPropagation()}>
@@ -389,81 +409,75 @@ function ModalCetakStruk({ item, onClose }) {
           {/* Farm Header */}
           <div className="text-center border-b pb-3 border-dashed border-slate-300">
             <h2 className="text-base font-extrabold uppercase tracking-tight text-slate-900">
-              PETERNAKAN UNGGUL MANDIRI
+              STRUK PENJUALAN
             </h2>
             <p className="text-[11px] text-slate-500">
-              Sistem Pendataan & Penjualan Ayam Broiler Berbasis Ons
+              Bukti Pembelian Ayam
             </p>
             <p className="text-[10px] text-slate-400 mt-0.5">
-              Nota Ref: #{item.id} &bull; {formatDateIndonesian(item.tanggal)}
+              No. Struk: {item.noStruk || item.id.replace('SL-', '000')} &bull; {formatDateIndonesian(item.tanggal)}
             </p>
           </div>
 
           {/* Details Table */}
-          <div className="space-y-2 text-xs">
-            <div className="flex justify-between py-0.5">
-              <span className="text-slate-500">Kloter Ayam:</span>
-              <strong className="text-slate-900">{item.namaKloter}</strong>
-            </div>
-            <div className="flex justify-between py-0.5">
-              <span className="text-slate-500">Nama Pembeli:</span>
-              <strong className="text-slate-900">{item.pembeli}</strong>
-            </div>
-            <div className="flex justify-between py-0.5">
-              <span className="text-slate-500">Metode Bayar:</span>
-              <strong className="text-slate-800">{item.metodePembayaran}</strong>
+          <div className="flex justify-between items-start text-xs">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">KEPADA</span>
+            <div className="text-right">
+              <span className="text-sm font-extrabold text-slate-900 block">{item.pembeli}</span>
+              <span className="text-[11px] text-slate-500 font-medium block">{item.kategoriPembeli || 'Pembeli Toko'}</span>
             </div>
           </div>
 
           <div className="border-t border-b py-2.5 border-dashed border-slate-300 space-y-1.5 text-xs">
+            <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">RINCIAN</div>
+            <div className="font-bold text-slate-900">Ayam</div>
             <div className="flex justify-between">
-              <span>Berat Timbangan Digital:</span>
-              <strong className="text-slate-900">{formatNumber(item.beratGram)} Gram</strong>
+              <span className="text-slate-500">Jumlah:</span>
+              <strong className="text-slate-900">{item.jumlahEkor || 1} ekor</strong>
             </div>
             <div className="flex justify-between">
-              <span>Hasil Konversi Ons (100g):</span>
-              <strong className="text-sky-700 font-extrabold">{formatNumber(ons, 1)} Ons</strong>
+              <span className="text-slate-500">Berat timbangan:</span>
+              <strong className="text-slate-900">{formatNumber(item.beratGram)} gram</strong>
             </div>
             <div className="flex justify-between">
-              <span>Harga Acuan Per Ons:</span>
-              <span>{formatRupiah(item.hargaPerOnsSnapshot)} / Ons</span>
+              <span className="text-slate-500">Setara:</span>
+              <strong className="text-slate-700">{formatNumber(item.beratGram / 1000, 2)} Kg / {formatNumber(ons, 1)} ons</strong>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Harga per ons:</span>
+              <span>{formatRupiah(item.hargaPerOnsSnapshot)}</span>
             </div>
           </div>
 
-          <div className="flex justify-between items-center text-sm font-extrabold pt-1">
-            <span>TOTAL PEMBAYARAN:</span>
-            <span className="text-emerald-700 text-base">{formatRupiah(item.totalHarga)}</span>
-          </div>
-
-          {item.catatanNota && (
-            <p className="text-[11px] text-slate-500 italic bg-slate-50 p-2 rounded-lg border border-slate-200">
-              Catatan: {item.catatanNota}
+          <div className="pt-1">
+            <div className="flex justify-between items-center text-sm font-extrabold">
+              <span>TOTAL:</span>
+              <span className="text-slate-900 text-base">{formatRupiah(item.totalHarga)}</span>
+            </div>
+            <p className="text-[10px] text-slate-500 italic mt-1">
+              Terbilang: {angkaKeTerbilang(item.totalHarga)}
             </p>
-          )}
+          </div>
 
           {/* Signature Footer */}
-          <div className="grid grid-cols-2 gap-4 pt-6 text-center text-[10px] text-slate-500">
-            <div>
-              <p>Pembeli / Penerima</p>
-              <div className="h-10"></div>
-              <p className="font-bold text-slate-800 underline">({item.pembeli})</p>
-            </div>
-            <div>
-              <p>Kasir / Admin Peternakan</p>
-              <div className="h-10"></div>
-              <p className="font-bold text-slate-800 underline">( Petugas Penjualan )</p>
-            </div>
+          <div className="text-center pt-3 text-xs text-slate-600 border-t border-slate-100">
+            <p className="font-bold text-slate-800">Terima kasih</p>
+            <p className="text-[10px] text-slate-400">Simpan struk ini sebagai bukti pembelian.</p>
           </div>
         </div>
 
         {/* Buttons */}
-        <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
-          <button className="px-3 py-1.5 text-xs font-bold rounded-xl border border-slate-300 hover:bg-slate-100" onClick={onClose}>
+        <div className="flex flex-wrap justify-end gap-2 pt-2 border-t border-slate-100">
+          <button className="px-3 py-1.5 text-xs font-bold rounded-xl border border-slate-300 hover:bg-slate-100 cursor-pointer" onClick={onClose}>
             Tutup
           </button>
-          <button className="px-4 py-1.5 text-xs font-bold rounded-xl bg-sky-600 hover:bg-sky-700 text-white flex items-center gap-1.5 shadow-sm cursor-pointer" onClick={handlePrint}>
-            <Printer size={15} />
-            <span>Cetak Struk Sekarang</span>
+          <button className="px-3 py-1.5 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5 shadow-xs cursor-pointer" onClick={handleDownloadPdf}>
+            <FileText size={14} />
+            <span>Download PDF Struk</span>
+          </button>
+          <button className="px-4 py-1.5 text-xs font-bold rounded-xl bg-sky-600 hover:bg-sky-700 text-white flex items-center gap-1.5 shadow-xs cursor-pointer" onClick={handlePrint}>
+            <Printer size={14} />
+            <span>Cetak Thermal</span>
           </button>
         </div>
       </div>

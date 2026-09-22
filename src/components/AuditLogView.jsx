@@ -24,10 +24,10 @@ export function AuditLogView({ auditLogs }) {
 
       <div className="bg-white p-3 rounded-xl border border-primary-200">
         <div className="relative">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
           <input
             type="text"
-            className="form-input pl-9"
+            className="form-input form-input-icon"
             placeholder="Filter audit log berdasarkan user, modul, atau pesan aktivitas..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}

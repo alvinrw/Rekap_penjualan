@@ -1,14 +1,41 @@
 import React, { useState } from 'react';
-import { FileSpreadsheet, Download } from 'lucide-react';
+import { FileSpreadsheet, Download, FileText, Filter } from 'lucide-react';
 import { calculateKloterMetrics, formatRupiah, formatNumber } from '../utils/calculations';
-import { exportKloterToExcel } from '../utils/exportUtils';
+import { exportKloterToExcel, exportKloterToPDF, exportKloterReportWithCoverPDF } from '../utils/exportUtils';
 import { Pagination } from './Pagination';
 
-export function LaporanAnalytics({ kloters, activeHargaPerOns }) {
+export function LaporanAnalytics({ kloters, activeHargaPerOns, users = [], auditLogs = [] }) {
   const [currentPage, setCurrentPage] = useState(1);
+  const [selectedKloterId, setSelectedKloterId] = useState('all');
+  const [selectedBulan, setSelectedBulan] = useState('all');
+  const [selectedTahun, setSelectedTahun] = useState('all');
   const pageSize = 15;
 
-  const reportsData = kloters.map((kloter) => ({
+  const currentYear = new Date().getFullYear();
+  const availableYears = [currentYear - 2, currentYear - 1, currentYear, currentYear + 1];
+
+  const monthOptions = [
+    { value: 'all', label: 'Semua Bulan' },
+    { value: '1', label: 'Januari' },
+    { value: '2', label: 'Februari' },
+    { value: '3', label: 'Maret' },
+    { value: '4', label: 'April' },
+    { value: '5', label: 'Mei' },
+    { value: '6', label: 'Juni' },
+    { value: '7', label: 'Juli' },
+    { value: '8', label: 'Agustus' },
+    { value: '9', label: 'September' },
+    { value: '10', label: 'Oktober' },
+    { value: '11', label: 'November' },
+    { value: '12', label: 'Desember' },
+  ];
+
+  // Filter kloters based on selected kloter ID
+  const filteredKloters = selectedKloterId === 'all'
+    ? kloters
+    : kloters.filter((k) => k.id === selectedKloterId);
+
+  const reportsData = filteredKloters.map((kloter) => ({
     kloter,
     metrics: calculateKloterMetrics(kloter, activeHargaPerOns),
   }));
@@ -18,23 +45,115 @@ export function LaporanAnalytics({ kloters, activeHargaPerOns }) {
     currentPage * pageSize
   );
 
+  const handleCetakPDF = (kloterObj) => {
+    if (kloterObj) {
+      exportKloterReportWithCoverPDF(kloterObj, selectedBulan, selectedTahun, activeHargaPerOns);
+    } else {
+      // Export all filtered kloters
+      if (filteredKloters.length === 0) {
+        alert('Tidak ada data kloter untuk di-export!');
+        return;
+      }
+      filteredKloters.forEach((k) => {
+        exportKloterReportWithCoverPDF(k, selectedBulan, selectedTahun, activeHargaPerOns);
+      });
+    }
+  };
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 font-sans">
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
             Laporan Performa Kloter
           </h1>
+          <p className="text-xs text-slate-500 font-medium">
+            Cetak laporan resmi kloter dengan cover template sesuai periode bulan &amp; tahun.
+          </p>
         </div>
 
-        <button
-          className="flex items-center justify-center gap-2 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-600 font-bold text-xs rounded-xl shadow-xs transition self-start sm:self-auto cursor-pointer"
-          onClick={() => exportKloterToExcel(kloters, 'all', activeHargaPerOns)}
-        >
-          <Download size={15} />
-          <span>Export Excel</span>
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            className="flex items-center justify-center gap-2 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-600 font-bold text-xs rounded-xl shadow-xs transition cursor-pointer"
+            onClick={() => exportKloterToExcel(filteredKloters, selectedKloterId, activeHargaPerOns, { users, auditLogs })}
+          >
+            <Download size={15} />
+            <span>Export Excel</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Filter Control Box */}
+      <div className="bg-white rounded-2xl border border-sky-100 p-4 shadow-xs">
+        <div className="flex items-center gap-2 mb-3">
+          <Filter size={16} className="text-sky-600" />
+          <h3 className="font-extrabold text-xs text-slate-800 uppercase tracking-wide">
+            Filter Laporan Kloter &amp; Periode
+          </h3>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {/* Filter Kloter */}
+          <div>
+            <label className="block text-[11px] font-bold text-slate-600 mb-1">
+              Pilih Kloter Ayam
+            </label>
+            <select
+              value={selectedKloterId}
+              onChange={(e) => {
+                setSelectedKloterId(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-sky-500 outline-none"
+            >
+              <option value="all">Semua Kloter ({kloters.length})</option>
+              {kloters.map((k) => (
+                <option key={k.id} value={k.id}>
+                  {k.namaKloter} ({k.kandang || 'Kandang'})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Filter Bulan */}
+          <div>
+            <label className="block text-[11px] font-bold text-slate-600 mb-1">
+              Filter Bulan Panen/Penjualan
+            </label>
+            <select
+              value={selectedBulan}
+              onChange={(e) => setSelectedBulan(e.target.value)}
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-sky-500 outline-none"
+            >
+              {monthOptions.map((m) => (
+                <option key={m.value} value={m.value}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Filter Tahun */}
+          <div>
+            <label className="block text-[11px] font-bold text-slate-600 mb-1">
+              Filter Tahun
+            </label>
+            <select
+              value={selectedTahun}
+              onChange={(e) => setSelectedTahun(e.target.value)}
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-sky-500 outline-none"
+            >
+              <option value="all">Semua Tahun</option>
+              {availableYears.map((yr) => (
+                <option key={yr} value={yr}>
+                  Tahun {yr}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
       </div>
 
       {/* Comparison Data Section */}
@@ -44,7 +163,7 @@ export function LaporanAnalytics({ kloters, activeHargaPerOns }) {
             <FileSpreadsheet size={18} className="text-sky-600" />
             <span>Perbandingan Performa Kloter</span>
           </h3>
-          <span className="text-xs font-bold text-slate-500">{kloters.length} Kloter</span>
+          <span className="text-xs font-bold text-slate-500">{filteredKloters.length} Kloter</span>
         </div>
 
         {/* Mobile View: Responsive Stacked Cards (< 640px) */}
@@ -106,6 +225,18 @@ export function LaporanAnalytics({ kloters, activeHargaPerOns }) {
                   </span>
                 </div>
               </div>
+
+              {/* Action Buttons for Mobile */}
+              <div className="pt-2 border-t border-sky-100 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-lg shadow-xs transition cursor-pointer"
+                  onClick={() => handleCetakPDF(kloter)}
+                >
+                  <FileText size={14} />
+                  <span>PDF Cover</span>
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -124,6 +255,7 @@ export function LaporanAnalytics({ kloters, activeHargaPerOns }) {
                 <th>Hasil Penjualan (Rp)</th>
                 <th>Net Profit (Rp)</th>
                 <th>ROI (%)</th>
+                <th className="text-right">Cetak Laporan</th>
               </tr>
             </thead>
             <tbody>
@@ -153,6 +285,19 @@ export function LaporanAnalytics({ kloters, activeHargaPerOns }) {
                   <td className="font-extrabold text-sky-900">
                     {formatNumber(metrics.roi, 2)}%
                   </td>
+                  <td className="text-right">
+                    <div className="flex items-center justify-end gap-1.5">
+                      <button
+                        type="button"
+                        className="flex items-center gap-1 px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white font-bold text-[11px] rounded-lg shadow-xs transition cursor-pointer"
+                        onClick={() => handleCetakPDF(kloter)}
+                        title="Cetak Laporan PDF Cover Template"
+                      >
+                        <FileText size={13} />
+                        <span>PDF Cover</span>
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -161,7 +306,7 @@ export function LaporanAnalytics({ kloters, activeHargaPerOns }) {
 
         <Pagination
           currentPage={currentPage}
-          totalItems={kloters.length}
+          totalItems={filteredKloters.length}
           pageSize={pageSize}
           onPageChange={setCurrentPage}
         />
@@ -169,4 +314,5 @@ export function LaporanAnalytics({ kloters, activeHargaPerOns }) {
     </div>
   );
 }
+
 

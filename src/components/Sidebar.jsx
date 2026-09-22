@@ -12,10 +12,11 @@ import {
 } from 'lucide-react';
 
 export function Sidebar({ currentTab, setCurrentTab, currentRole, currentUser, onLogout }) {
-  const isSuperAdmin = currentRole === 'super_admin';
+  const activeRole = currentRole || currentUser?.role || 'viewer';
+  const canAccessManagement = activeRole === 'super_admin' || activeRole === 'admin';
 
   return (
-    <aside className="hidden md:flex flex-col w-64 bg-white border-r border-sky-100 p-4 space-y-6 sticky top-0 h-screen z-20">
+    <aside className="app-sidebar hidden md:flex flex-col w-64 bg-white border-r border-sky-100 p-4 space-y-6 sticky top-0 h-screen z-20">
       <div className="px-2 py-1">
         <span className="font-extrabold text-sm text-slate-900 block leading-tight">Pendataan Ayam</span>
         <span className="text-[10px] text-sky-600 font-bold uppercase tracking-wider">Kloter Management</span>
@@ -82,7 +83,7 @@ export function Sidebar({ currentTab, setCurrentTab, currentRole, currentUser, o
           <span>Laporan & Analisis</span>
         </button>
 
-        {(currentRole === 'super_admin' || currentRole === 'admin') && (
+        {canAccessManagement && (
           <>
             <div className="pt-4 pb-1 px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
               Pengaturan User &amp; Export

@@ -1,17 +1,28 @@
 import React, { useState } from 'react';
-import { Boxes, ShieldCheck, Lock, Mail, ArrowRight, Tag } from 'lucide-react';
+import { Boxes, Lock, Mail, ArrowRight, Tag, Eye, EyeOff } from 'lucide-react';
 import { formatRupiah } from '../utils/calculations';
 
 export function LoginPage({ users, activePrice, onLogin }) {
-  const [email, setEmail] = useState('alvin.admin@peternakan-unggul.co.id');
-  const [password, setPassword] = useState('12345678');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    // Find user by email or default to first user (Super Admin)
-    const foundUser = users.find((u) => u.email.toLowerCase() === email.toLowerCase()) || users[0];
-    onLogin(foundUser);
+    // Find user by email or username AND matching password
+    const foundUser = users.find(
+      (u) =>
+        ((u.email && u.email.toLowerCase() === email.trim().toLowerCase()) ||
+        (u.username && u.username.toLowerCase() === email.trim().toLowerCase())) &&
+        u.password === password
+    );
+
+    if (foundUser) {
+      onLogin(foundUser);
+    } else {
+      alert('Email/Username atau Kata Sandi salah!');
+    }
   };
 
   return (
@@ -76,13 +87,13 @@ export function LoginPage({ users, activePrice, onLogin }) {
             {/* Direct Login Form */}
             <form onSubmit={handleSubmit} className="space-y-4 mt-4">
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-700 block">Alamat Email:</label>
+                <label className="text-xs font-bold text-slate-700 block">Email atau Username:</label>
                 <div className="relative">
                   <Mail size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
-                    type="email"
+                    type="text"
                     className="w-full pl-10 pr-4 py-2.5 text-xs rounded-xl border border-slate-300 focus:outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 font-medium"
-                    placeholder="nama@peternakan-unggul.co.id"
+                    placeholder="Masukkan email atau username..."
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
@@ -95,13 +106,21 @@ export function LoginPage({ users, activePrice, onLogin }) {
                 <div className="relative">
                   <Lock size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
-                    type="password"
-                    className="w-full pl-10 pr-4 py-2.5 text-xs rounded-xl border border-slate-300 focus:outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 font-medium"
+                    type={showPassword ? 'text' : 'password'}
+                    className="w-full pl-10 pr-10 py-2.5 text-xs rounded-xl border border-slate-300 focus:outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 font-medium"
                     placeholder="Masukkan kata sandi..."
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition cursor-pointer p-1"
+                    title={showPassword ? 'Sembunyikan Kata Sandi' : 'Tampilkan Kata Sandi'}
+                  >
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
                 </div>
               </div>
 
